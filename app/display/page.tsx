@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, X, Play, Pause } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 
 interface SlideElement {
@@ -183,18 +183,9 @@ export default function DisplayPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        goToPreviousSlide();
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        goToNextSlide();
-      } else if (e.key === "Escape") {
+      if (e.key === "Escape") {
         e.preventDefault();
         exitPresentation();
-      } else if (e.key === " ") {
-        e.preventDefault();
-        togglePlayPause();
       }
     };
 
@@ -202,24 +193,8 @@ export default function DisplayPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentSlideIndex, slides.length, isPlaying]);
 
-  const goToNextSlide = useCallback(() => {
-    if (slides.length > 1) {
-      setCurrentSlideIndex((prev) => (prev + 1) % slides.length);
-    }
-  }, [slides.length]);
-
-  const goToPreviousSlide = useCallback(() => {
-    if (slides.length > 1) {
-      setCurrentSlideIndex((prev) => (prev - 1 + slides.length) % slides.length);
-    }
-  }, [slides.length]);
-
   const exitPresentation = () => {
     router.push("/dashboard/screens");
-  };
-
-  const togglePlayPause = () => {
-    setIsPlaying(!isPlaying);
   };
 
   return (
@@ -335,72 +310,10 @@ export default function DisplayPage() {
         </div>
 
 
-        <div
-          className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none"
-          style={{
-            opacity: showControls ? 1 : 0,
-            transition: 'opacity 0.4s ease',
-          }}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/20 h-16 w-16 pointer-events-auto"
-            onClick={goToPreviousSlide}
-            disabled={slides.length <= 1}
-          >
-            <ChevronLeft className="h-10 w-10" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/20 h-16 w-16 pointer-events-auto"
-            onClick={goToNextSlide}
-            disabled={slides.length <= 1}
-          >
-            <ChevronRight className="h-10 w-10" />
-          </Button>
-        </div>
 
 
-        <div
-          className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent"
-          style={{
-            opacity: showControls ? 1 : 0,
-            transition: 'opacity 0.4s ease',
-            pointerEvents: showControls ? 'auto' : 'none',
-          }}
-        >
-          <div className="flex items-center justify-between">
-
-            <div className="flex-1 mx-4">
-              <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white/60 transition-all duration-300"
-                  style={{
-                    width: `${((currentSlideIndex + 1) / slides.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
 
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/20"
-              onClick={togglePlayPause}
-            >
-              {isPlaying ? (
-                <Pause className="h-5 w-5" />
-              ) : (
-                <Play className="h-5 w-5" />
-              )}
-            </Button>
-          </div>
-
-
-        </div>
       </>
 
 
