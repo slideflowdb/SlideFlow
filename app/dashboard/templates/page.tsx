@@ -247,7 +247,7 @@ export default function TemplatesPage() {
 
             
             <Dialog open={!!previewTemplate} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-xl">
                             {previewTemplate?.name}
