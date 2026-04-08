@@ -51,10 +51,6 @@ You should now see the SlideFlow login screen!
 
 ---
 
-## Default Administrator Login
-To access the Dashboard, use the following credentials provided in the database `credentials` table:
-*   **Username:** `Admin`
-*   **Password:** `Password1`
 
 ## Key Features
 *   **Secure Authentication:** Access restricted exclusively to authorized administrators.

@@ -117,7 +117,7 @@ export default function TemplatesPage() {
                 t.description.toLowerCase().includes(q) ||
                 t.tags.some((tag) => tag.toLowerCase().includes(q))
             );
-        });
+        }).reverse();
     }, [searchQuery, selectedGenre]);
 
     const handleUseTemplate = async (template: SlideTemplate) => {

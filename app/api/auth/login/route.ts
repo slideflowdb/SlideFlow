@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
         body = await request.json();
     } catch {
         return NextResponse.json(
-            { error: 'Request body must be valid JSON. Example: { "username": "Admin", "password": "Password1" }' },
+            { error: 'Request body must be valid JSON. Example: { "username": "Admin", "password": "Stratus721" }' },
             { status: 400 }
         );
     }
