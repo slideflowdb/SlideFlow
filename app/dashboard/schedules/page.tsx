@@ -24,6 +24,8 @@ import {
   CalendarClock,
   X,
   AlertCircle,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 
 interface Show {
@@ -94,6 +96,8 @@ export default function SchedulesPage() {
   const [formStart, setFormStart] = useState("");
   const [formFinish, setFormFinish] = useState("");
   const [formError, setFormError] = useState("");
+  const [showPickerOpen, setShowPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
   
   const [conflictWarning, setConflictWarning] = useState<{
     showName: string;
@@ -142,6 +146,8 @@ export default function SchedulesPage() {
     setFormFinish("");
     setFormError("");
     setEditingShowId(null);
+    setShowPickerOpen(false);
+    setPickerSearch("");
   };
 
   const openCreate = () => {
@@ -171,11 +177,7 @@ export default function SchedulesPage() {
   const handleSave = async () => {
     setFormError("");
 
-    // Validate: must select a show or content (unless editing)
-    if (!editingShowId && !formExistingShowId && !formContentId) {
-      setFormError("Please select a saved slide or content to schedule.");
-      return;
-    }
+    // No longer requiring content selection
 
     // Validate: start and finish times are required
     if (!formStart || !formFinish) {
@@ -367,56 +369,99 @@ export default function SchedulesPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium mb-1">
-                  Existing Slide / Content <span className="text-red-500">*</span>
-                </label>
-                {!editingShowId && (
-                  <div className="space-y-2">
-                    {allShows.filter(s => !s.start_time).length > 0 && (
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Saved Slides (no schedule yet)</label>
-                        <select
-                          value={formExistingShowId}
-                          onChange={(e) => { setFormExistingShowId(e.target.value); setFormContentId(""); if (e.target.value) { const s = allShows.find(s => s.id === parseInt(e.target.value)); if (s) setFormName(s.name); } }}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          <option value="">Select a saved slide...</option>
-                          {allShows.filter(s => !s.start_time).map((s) => (
-                            <option key={s.id} value={s.id}>{s.name}{s.content ? ` (${s.content.name})` : ""}</option>
-                          ))}
-                        </select>
+
+              {/* Select Existing Presentation */}
+              {!editingShowId && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium mb-1">
+                    Select Existing Presentation
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowPickerOpen(!showPickerOpen)}
+                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent/50 transition-colors"
+                    >
+                      <span className={formExistingShowId ? "text-foreground" : "text-muted-foreground"}>
+                        {formExistingShowId
+                          ? allShows.find((s) => s.id === parseInt(formExistingShowId, 10))?.name || "Selected"
+                          : "Choose a presentation..."}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showPickerOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {showPickerOpen && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-background shadow-lg">
+                        <div className="p-2 border-b">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                            <input
+                              type="text"
+                              value={pickerSearch}
+                              onChange={(e) => setPickerSearch(e.target.value)}
+                              placeholder="Search presentations..."
+                              className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto py-1">
+                          {allShows
+                            .filter((s) =>
+                              s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+                            )
+                            .map((show) => (
+                              <button
+                                key={show.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormExistingShowId(show.id.toString());
+                                  if (!formName) setFormName(show.name);
+                                  setShowPickerOpen(false);
+                                  setPickerSearch("");
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center justify-between ${
+                                  formExistingShowId === show.id.toString() ? "bg-accent/50 font-medium" : ""
+                                }`}
+                              >
+                                <span className="truncate">{show.name}</span>
+                                <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                                  {Array.isArray(show.slides_data) ? show.slides_data.length : 0} slides
+                                </span>
+                              </button>
+                            ))}
+                          {allShows.filter((s) =>
+                            s.name.toLowerCase().includes(pickerSearch.toLowerCase())
+                          ).length === 0 && (
+                            <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                              No presentations found
+                            </div>
+                          )}
+                        </div>
+                        {formExistingShowId && (
+                          <div className="border-t p-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormExistingShowId("");
+                                setShowPickerOpen(false);
+                                setPickerSearch("");
+                              }}
+                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1"
+                            >
+                              Clear selection
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
-                    <div>
-                      <label className="block text-xs text-muted-foreground mb-1">Or assign content</label>
-                      <select
-                        value={formContentId}
-                        onChange={(e) => { setFormContentId(e.target.value); setFormExistingShowId(""); }}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        disabled={!!formExistingShowId}
-                      >
-                        <option value="">Select content...</option>
-                        {allContent.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
-                )}
-                {editingShowId && (
-                  <select
-                    value={formContentId}
-                    onChange={(e) => setFormContentId(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Select content...</option>
-                    {allContent.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Optionally select an existing presentation to schedule
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Start Time <span className="text-red-500">*</span>

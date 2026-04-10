@@ -167,7 +167,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Shows</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Presentations</CardTitle>
             <Presentation className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -188,7 +188,7 @@ export default function DashboardPage() {
               {isLoading ? "—" : formatDuration(totalDuration)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Across all shows
+              Across all presentations
             </p>
           </CardContent>
         </Card>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{isLoading ? "—" : scheduledShows}</div>
             <p className="text-xs text-muted-foreground">
-              Shows with scheduled times
+              Presentations with scheduled times
             </p>
           </CardContent>
         </Card>
@@ -335,7 +335,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="p-3 border rounded-lg border-dashed text-center">
-                    <p className="text-sm text-muted-foreground">No upcoming shows</p>
+                    <p className="text-sm text-muted-foreground">No upcoming presentations</p>
                   </div>
                 )}
               </div>
@@ -343,7 +343,7 @@ export default function DashboardPage() {
             <div className="mt-4">
               <Link href="/dashboard/screens">
                 <Button variant="outline" className="w-full">
-                  Manage Slides
+                  Manage Presentations
                 </Button>
               </Link>
             </div>
@@ -353,17 +353,17 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Shows</CardTitle>
-            <CardDescription>Your most recently updated shows</CardDescription>
+            <CardTitle>Recent Presentations</CardTitle>
+            <CardDescription>Your most recently updated presentations</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : shows.length === 0 ? (
               <div className="p-4 border rounded-lg border-dashed text-center">
-                <p className="text-sm text-muted-foreground">No shows yet</p>
+                <p className="text-sm text-muted-foreground">No presentations yet</p>
                 <Link href="/dashboard/screens">
-                  <Button variant="link" className="mt-2">Create your first show</Button>
+                  <Button variant="link" className="mt-2">Create your first presentation</Button>
                 </Link>
               </div>
             ) : (

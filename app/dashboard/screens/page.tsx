@@ -21,7 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Play, Copy, Trash2, MoreVertical, Presentation, Clock, Video, Moon, Sun, Search, GripVertical } from "lucide-react";
+import { Plus, Edit, Play, Copy, Trash2, MoreVertical, Presentation, Clock, Video, Moon, Sun, Search, GripVertical, ArrowUpDown, ArrowDownAZ, ArrowUpAZ, Check, Calendar } from "lucide-react";
 
 interface Show {
   id: number;
@@ -76,6 +76,8 @@ export default function ScreensPage() {
   const [presentSearch, setPresentSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [selectedPresentIds, setSelectedPresentIds] = useState<Set<number>>(new Set());
 
   // Drag and drop state
   const [draggedShowId, setDraggedShowId] = useState<number | null>(null);
@@ -114,12 +116,12 @@ export default function ScreensPage() {
   const handleAddSlide = () => {
     if (!newSlideName.trim()) return;
 
-    // Check for duplicate project name (case-insensitive)
+    // Check for duplicate presentation name (case-insensitive)
     const duplicate = shows.find(
       (s) => (s.name || "").toLowerCase().trim() === newSlideName.toLowerCase().trim()
     );
     if (duplicate) {
-      setNameError(`A project named "${duplicate.name}" already exists. Please choose a different name.`);
+      setNameError(`A presentation named "${duplicate.name}" already exists. Please choose a different name.`);
       return;
     }
 
@@ -182,7 +184,7 @@ export default function ScreensPage() {
       showId = show.id;
     } else {
       slidesData = shows.flatMap((s) => (Array.isArray(s.slides_data) ? s.slides_data : []));
-      showName = "All Projects";
+      showName = "All Presentations";
     }
 
     try {
@@ -201,6 +203,54 @@ export default function ScreensPage() {
 
     setIsPresentDialogOpen(false);
     setPresentSearch("");
+    setSelectedPresentIds(new Set());
+  };
+
+  const handlePresentSelected = async () => {
+    const selectedShows = shows.filter((s) => selectedPresentIds.has(s.id));
+    const slidesData = selectedShows.flatMap((s) => (Array.isArray(s.slides_data) ? s.slides_data : []));
+    const showName = selectedShows.length === 1
+      ? (selectedShows[0].name || "Untitled")
+      : `${selectedShows.length} Presentations`;
+    const showId = selectedShows.length === 1 ? selectedShows[0].id : null;
+
+    try {
+      await fetch("/api/shows/present", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          showId: showId || null,
+          showName,
+          slidesData,
+        }),
+      });
+    } catch (error) {
+      console.error("Error starting presentation:", error);
+    }
+
+    setIsPresentDialogOpen(false);
+    setPresentSearch("");
+    setSelectedPresentIds(new Set());
+  };
+
+  const togglePresentSelection = (id: number) => {
+    setSelectedPresentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedPresentIds.size === filteredShowsForPresent.length) {
+      setSelectedPresentIds(new Set());
+    } else {
+      setSelectedPresentIds(new Set(filteredShowsForPresent.map((s) => s.id)));
+    }
   };
 
   const filteredShowsForPresent = shows.filter((show) =>
@@ -269,13 +319,32 @@ export default function ScreensPage() {
       <div className={`space-y-6 p-6 min-h-screen ${darkMode ? 'dashboard-bg' : ''}`}>
         <div className="flex justify-between items-center">
           <div>
-            <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'dashboard-text' : ''}`}>Projects</h1>
+            <h1 className={`text-3xl font-bold tracking-tight ${darkMode ? 'dashboard-text' : ''}`}>Presentations</h1>
             <p className={darkMode ? 'dashboard-text-muted' : 'text-muted-foreground'}>
-              Create and manage your presentation projects
+              Create and manage your presentations
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={isPresentDialogOpen} onOpenChange={(open) => { setIsPresentDialogOpen(open); if (!open) setPresentSearch(""); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
+              className={`gap-2 ${darkMode ? 'dashboard-button' : ''}`}
+              title={sortOrder === "desc" ? "Sorted: Newest first (click for oldest first)" : "Sorted: Oldest first (click for newest first)"}
+            >
+              {sortOrder === "desc" ? (
+                <>
+                  <ArrowDownAZ className="h-4 w-4" />
+                  <span className="hidden sm:inline">Newest First</span>
+                </>
+              ) : (
+                <>
+                  <ArrowUpAZ className="h-4 w-4" />
+                  <span className="hidden sm:inline">Oldest First</span>
+                </>
+              )}
+            </Button>
+            <Dialog open={isPresentDialogOpen} onOpenChange={(open) => { setIsPresentDialogOpen(open); if (!open) { setPresentSearch(""); setSelectedPresentIds(new Set()); } }}>
               <DialogTrigger asChild>
                 <Button variant="outline" className={darkMode ? 'dashboard-button' : ''}>
                   <Presentation className="mr-2 h-4 w-4" />
@@ -284,34 +353,62 @@ export default function ScreensPage() {
               </DialogTrigger>
               <DialogContent className={`sm:max-w-lg ${darkMode ? 'bg-gray-900 border-gray-700' : ''}`}>
                 <DialogHeader>
-                  <DialogTitle className={darkMode ? 'text-white' : ''}>Select a Project to Present</DialogTitle>
+                  <DialogTitle className={darkMode ? 'text-white' : ''}>Select Presentations to Present</DialogTitle>
                   <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
-                    Choose a project to display or present all projects
+                    Check the presentations you want to present together
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-2">
-                  <div className="relative mb-3">
-                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`} />
-                    <Input
-                      placeholder="Search projects..."
-                      value={presentSearch}
-                      onChange={(e) => setPresentSearch(e.target.value)}
-                      className={`pl-9 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
-                    />
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <div className="relative flex-1">
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`} />
+                      <Input
+                        placeholder="Search presentations..."
+                        value={presentSearch}
+                        onChange={(e) => setPresentSearch(e.target.value)}
+                        className={`pl-9 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={toggleSelectAll}
+                      className={`shrink-0 text-xs ${darkMode ? 'text-gray-300 hover:bg-gray-800' : ''}`}
+                    >
+                      {selectedPresentIds.size === filteredShowsForPresent.length && filteredShowsForPresent.length > 0 ? "Deselect All" : "Select All"}
+                    </Button>
                   </div>
                   <div className="max-h-64 overflow-y-auto space-y-2">
                     {filteredShowsForPresent.length === 0 ? (
-                      <p className={`text-sm text-center py-4 ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>No projects found</p>
+                      <p className={`text-sm text-center py-4 ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>No presentations found</p>
                     ) : (
                       filteredShowsForPresent.map((show) => {
                         const slideCount = Array.isArray(show.slides_data) ? show.slides_data.length : 0;
+                        const isSelected = selectedPresentIds.has(show.id);
                         return (
                           <button
                             key={show.id}
-                            onClick={() => handlePresent(show)}
-                            className={`w-full flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${darkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-white' : 'bg-card hover:bg-accent border-border'}`}
+                            onClick={() => togglePresentSelection(show.id)}
+                            className={`w-full flex items-center justify-between p-3 rounded-lg border text-left transition-all ${
+                              isSelected
+                                ? darkMode
+                                  ? 'bg-blue-900/30 border-blue-500 ring-1 ring-blue-500/50 text-white'
+                                  : 'bg-blue-50 border-blue-300 ring-1 ring-blue-200'
+                                : darkMode
+                                  ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-white'
+                                  : 'bg-card hover:bg-accent border-border'
+                            }`}
                           >
                             <div className="flex items-center gap-3">
+                              <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-600 border-blue-600 text-white'
+                                  : darkMode
+                                    ? 'border-gray-500'
+                                    : 'border-gray-300'
+                              }`}>
+                                {isSelected && <Check className="h-3 w-3" />}
+                              </div>
                               <div className={`h-9 w-9 rounded flex items-center justify-center text-sm font-medium ${darkMode ? 'bg-gray-700' : 'bg-primary/10'}`}>
                                 {slideCount}
                               </div>
@@ -320,20 +417,24 @@ export default function ScreensPage() {
                                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>{slideCount} {slideCount === 1 ? 'slide' : 'slides'}</p>
                               </div>
                             </div>
-                            <Play className={`h-4 w-4 ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`} />
                           </button>
                         );
                       })
                     )}
                   </div>
                 </div>
+                {selectedPresentIds.size > 0 && (
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>
+                    {selectedPresentIds.size} {selectedPresentIds.size === 1 ? 'presentation' : 'presentations'} selected · {shows.filter(s => selectedPresentIds.has(s.id)).reduce((acc, s) => acc + (Array.isArray(s.slides_data) ? s.slides_data.length : 0), 0)} total slides
+                  </p>
+                )}
                 <DialogFooter className="gap-4 sm:space-x-4">
-                  <Button variant="outline" onClick={() => { setIsPresentDialogOpen(false); setPresentSearch(""); }} className={darkMode ? 'border-gray-600 text-white hover:bg-gray-800' : ''}>
+                  <Button variant="outline" onClick={() => { setIsPresentDialogOpen(false); setPresentSearch(""); setSelectedPresentIds(new Set()); }} className={darkMode ? 'border-gray-600 text-white hover:bg-gray-800' : ''}>
                     Cancel
                   </Button>
-                  <Button onClick={() => handlePresent()} disabled={shows.length === 0}>
+                  <Button onClick={handlePresentSelected} disabled={selectedPresentIds.size === 0}>
                     <Presentation className="mr-2 h-4 w-4" />
-                    Present All
+                    Present Selected ({selectedPresentIds.size})
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -342,14 +443,14 @@ export default function ScreensPage() {
               <DialogTrigger asChild>
                 <Button className={darkMode ? 'bg-gray-700 hover:bg-gray-600' : ''}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Add Project
+                  Add Presentation
                 </Button>
               </DialogTrigger>
               <DialogContent className={darkMode ? 'bg-gray-900 border-gray-700' : ''}>
                 <DialogHeader>
                   <DialogTitle className={darkMode ? 'text-white' : ''}>Create New Project</DialogTitle>
                   <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
-                    Give your project a name to get started
+                    Give your presentation a name to get started
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-4 space-y-2">
@@ -357,7 +458,7 @@ export default function ScreensPage() {
                     Project Name <span className="text-red-500">*</span>
                   </label>
                   <Input
-                    placeholder="Enter project name..."
+                    placeholder="Enter presentation name..."
                     value={newSlideName}
                     onChange={(e) => { setNewSlideName(e.target.value); setNameError(""); }}
                     onKeyDown={(e) => {
@@ -392,7 +493,11 @@ export default function ScreensPage() {
 
         {!isLoading && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {shows.map((show, index) => {
+            {[...shows].sort((a, b) => {
+              const dateA = new Date(a.created_at).getTime();
+              const dateB = new Date(b.created_at).getTime();
+              return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+            }).map((show, index) => {
               const previewSlide = getPreviewSlide(show);
               const slideCount = getShowSlideCount(show);
               const totalDuration = getShowTotalDuration(show);
@@ -525,6 +630,17 @@ export default function ScreensPage() {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/dashboard/schedules?showId=${show.id}`);
+                          }}
+                        >
+                          <Calendar className="mr-2 h-4 w-4" />
+                          Schedule
+                        </Button>
                       </div>
 
 
@@ -548,9 +664,6 @@ export default function ScreensPage() {
                         <h3 className={`font-medium truncate ${darkMode ? 'text-white' : ''}`}>{show.name || 'Untitled'}</h3>
                         <div className="flex flex-col gap-2 mt-1">
                           <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>
-                            <Clock className="h-3 w-3" />
-                            <span>{formatDuration(totalDuration)}</span>
-                            <span>•</span>
                             <span>{slideCount} {slideCount === 1 ? 'slide' : 'slides'}</span>
                           </div>
                           <div className={`flex flex-col gap-0.5 text-[0.65rem] ${darkMode ? 'text-gray-500' : 'text-muted-foreground/80'}`}>
@@ -601,7 +714,7 @@ export default function ScreensPage() {
                 </div>
                 <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-white' : ''}`}>Add New Project</h3>
                 <p className={`text-sm text-center ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>
-                  Create a new project for your presentation
+                  Create a new presentation
                 </p>
               </CardContent>
             </Card>

@@ -8,6 +8,7 @@ import {
   Monitor,
   LayoutTemplate,
   Images,
+  FolderOpen,
   Calendar,
   Tv2,
   Settings,
@@ -21,7 +22,7 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Project",
+    title: "Presentations",
     href: "/dashboard/screens",
     icon: Monitor,
   },
@@ -39,6 +40,11 @@ const navItems = [
     title: "Schedules",
     href: "/dashboard/schedules",
     icon: Calendar,
+  },
+  {
+    title: "Storing",
+    href: "/dashboard/storing",
+    icon: FolderOpen,
   },
   {
     title: "Display",
@@ -64,7 +70,9 @@ export function DashboardNav() {
     <nav className="space-y-1 px-2">
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isActive = item.href === "/dashboard"
+          ? pathname === "/dashboard"
+          : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
         return (
           <Link

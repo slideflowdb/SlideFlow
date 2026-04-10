@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tv2, Clock, CalendarClock, MonitorPlay, RefreshCw } from "lucide-react";
+import { Tv2, Clock, CalendarClock, MonitorPlay, RefreshCw, StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -312,6 +312,7 @@ export default function DisplayDashboardPage() {
     const [manualPresent, setManualPresent] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+    const [isStopping, setIsStopping] = useState(false);
 
     const fetchData = useCallback(async () => {
         try {
@@ -334,6 +335,26 @@ export default function DisplayDashboardPage() {
         return () => clearInterval(interval);
     }, [fetchData]);
 
+    const handleStopPresentation = async () => {
+        setIsStopping(true);
+        try {
+            if (manualPresent) {
+                await fetch("/api/shows/present", { method: "DELETE" });
+            } else if (currentShow) {
+                await fetch("/api/shows", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: currentShow.id, startTime: null, finishTime: null }),
+                });
+            }
+            await fetchData();
+        } catch (err) {
+            console.error("Error stopping presentation:", err);
+        } finally {
+            setIsStopping(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             
@@ -351,6 +372,16 @@ export default function DisplayDashboardPage() {
                     <Button variant="outline" size="icon" onClick={fetchData} title="Refresh now">
                         <RefreshCw className="h-4 w-4" />
                     </Button>
+                    {(manualPresent || currentShow) && (
+                        <Button
+                            variant="destructive"
+                            onClick={handleStopPresentation}
+                            disabled={isStopping}
+                        >
+                            <StopCircle className="mr-2 h-4 w-4" />
+                            {isStopping ? "Stopping..." : "Stop Presentation"}
+                        </Button>
+                    )}
                     <Link href="/display" target="_blank">
                         <Button>
                             <MonitorPlay className="mr-2 h-4 w-4" />
@@ -391,57 +422,45 @@ export default function DisplayDashboardPage() {
                         </CardHeader>
 
                         <CardContent>
-                            {manualPresent && manualPresent.slides_data?.length > 0 ? (
+                            {manualPresent || (currentShow && currentShow.slides_data?.length > 0) ? (
                                 <div className="space-y-4">
-                                    
+                                    {/* Live synced iframe of the actual display */}
                                     <div className="border rounded-xl overflow-hidden shadow-sm">
-                                        <CyclingSlidePreview
-                                            slides={manualPresent.slides_data}
-                                            className="border-0"
-                                        />
+                                        <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                                            <iframe
+                                                src="/display"
+                                                className="absolute inset-0 w-full h-full"
+                                                style={{
+                                                    border: "none",
+                                                    pointerEvents: "none",
+                                                }}
+                                                title="Live Display Preview"
+                                            />
+                                        </div>
                                     </div>
 
-                                    
+                                    {/* Show info bar */}
                                     <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                                         <div>
-                                            <p className="font-semibold">{manualPresent.show_name || "Manual Present"}</p>
+                                            <p className="font-semibold">
+                                                {manualPresent
+                                                    ? manualPresent.show_name || "Manual Present"
+                                                    : currentShow!.name}
+                                            </p>
                                             <p className="text-xs text-muted-foreground">
-                                                {manualPresent.slides_data.length} slide
-                                                {manualPresent.slides_data.length !== 1 && "s"}
-                                                {" • Manually presented"}
+                                                {manualPresent
+                                                    ? `${manualPresent.slides_data?.length || 0} slide${(manualPresent.slides_data?.length || 0) !== 1 ? "s" : ""} • Manually presented`
+                                                    : `${currentShow!.slides_data.length} slide${currentShow!.slides_data.length !== 1 ? "s" : ""}${currentShow!.content ? ` • ${currentShow!.content.name}` : ""}`}
                                             </p>
                                         </div>
-                                        {manualPresent.started_at && (
+                                        {manualPresent?.started_at ? (
                                             <div className="text-right text-xs text-muted-foreground">
                                                 <div className="flex items-center gap-1">
                                                     <Clock className="h-3 w-3" />
                                                     Since {formatDateTime(manualPresent.started_at)}
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ) : currentShow && currentShow.slides_data?.length > 0 ? (
-                                <div className="space-y-4">
-                                    
-                                    <div className="border rounded-xl overflow-hidden shadow-sm">
-                                        <CyclingSlidePreview
-                                            slides={currentShow.slides_data}
-                                            className="border-0"
-                                        />
-                                    </div>
-
-                                    
-                                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                        <div>
-                                            <p className="font-semibold">{currentShow.name}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {currentShow.slides_data.length} slide
-                                                {currentShow.slides_data.length !== 1 && "s"}
-                                                {currentShow.content && ` • ${currentShow.content.name}`}
-                                            </p>
-                                        </div>
-                                        {currentShow.start_time && currentShow.finish_time && (
+                                        ) : currentShow?.start_time && currentShow?.finish_time ? (
                                             <div className="flex flex-col items-end gap-1">
                                                 <div className="text-right text-xs text-muted-foreground">
                                                     <div className="flex items-center gap-1">
@@ -454,18 +473,17 @@ export default function DisplayDashboardPage() {
                                                     <TimeRemaining date={currentShow.finish_time} />
                                                 </div>
                                             </div>
-                                        )}
+                                        ) : null}
                                     </div>
                                 </div>
                             ) : (
-                                
                                 <div className="flex flex-col items-center justify-center py-16 text-center">
                                     <div className="rounded-full bg-muted p-5 mb-4">
                                         <Tv2 className="h-10 w-10 text-muted-foreground/50" />
                                     </div>
                                     <h3 className="font-semibold text-lg mb-1">Nothing Playing</h3>
                                     <p className="text-sm text-muted-foreground max-w-xs">
-                                        No show is currently active. Schedule a show on the{" "}
+                                        No presentation is currently active. Schedule one on the{" "}
                                         <Link
                                             href="/dashboard/schedules"
                                             className="text-primary underline underline-offset-2"
@@ -477,7 +495,7 @@ export default function DisplayDashboardPage() {
                                             href="/dashboard/screens"
                                             className="text-primary underline underline-offset-2"
                                         >
-                                            Screens
+                                            Presentations
                                         </Link>{" "}
                                         page.
                                     </p>

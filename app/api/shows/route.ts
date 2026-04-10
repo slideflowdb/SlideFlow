@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ show: data });
         }
 
+        const folderId = searchParams.get("folderId");
+
         let query = supabase
             .from("show")
             .select("*, content(*)")
@@ -39,6 +41,12 @@ export async function GET(request: NextRequest) {
 
         if (scheduled === "true") {
             query = query.not("start_time", "is", null);
+        }
+
+        if (folderId === "root") {
+            query = query.is("folder_id", null);
+        } else if (folderId) {
+            query = query.eq("folder_id", folderId);
         }
 
         const { data, error } = await query;
@@ -58,7 +66,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, contentId, name, slidesData, startTime, finishTime, deviceId, locationId, clientId } = body;
+        const { id, contentId, name, slidesData, startTime, finishTime, deviceId, locationId, clientId, folderId } = body;
 
         let validContentId = null;
         let generatedSlidesData = slidesData;
@@ -118,6 +126,7 @@ export async function POST(request: NextRequest) {
             if (locationId !== undefined) updateData.location_id = locationId;
             if (clientId !== undefined) updateData.client_id = clientId;
             if (validContentId !== null) updateData.content_id = validContentId;
+            if (folderId !== undefined) updateData.folder_id = folderId;
 
             const { data, error } = await supabase
                 .from("show")

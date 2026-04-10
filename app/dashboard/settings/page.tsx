@@ -70,10 +70,10 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Bell className="h-5 w-5" />
-            Notification Preferences
+            Pop Up Preferences
           </CardTitle>
           <CardDescription>
-            Choose what notifications you want to receive
+            Choose what pop ups you want to receive
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

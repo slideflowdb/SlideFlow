@@ -158,6 +158,7 @@ export default function SlideEditorPage() {
   const params = useParams();
   const router = useRouter();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedTool, setSelectedTool] = useState("select");
@@ -177,6 +178,7 @@ export default function SlideEditorPage() {
   const [scheduleFinish, setScheduleFinish] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const [zoom, setZoom] = useState(100);
+  const [autoFitZoom, setAutoFitZoom] = useState(true);
   const [slides, setSlides] = useState<Slide[]>([
     {
       id: params.slideId as string,
@@ -220,6 +222,35 @@ export default function SlideEditorPage() {
   const [isContentPickerOpen, setIsContentPickerOpen] = useState(false);
   const [contentAssets, setContentAssets] = useState<any[]>([]);
   const [isContentLoading, setIsContentLoading] = useState(false);
+  const [contentFolders, setContentFolders] = useState<any[]>([]);
+  const [currentContentFolderId, setCurrentContentFolderId] = useState<string | null>(null);
+  const [contentFolderPath, setContentFolderPath] = useState<{id: string | null, name: string}[]>([{id: null, name: 'Root'}]);
+  const [customPresetColors, setCustomPresetColors] = useState<string[]>(["#459cca", "#8c9094", "#2b333a"]);
+
+  // Load custom presets from localStorage (defaults are the initial 3 above)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("slideflow_custom_presets");
+      if (saved) setCustomPresetColors(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const addCustomPreset = (color: string) => {
+    const normalized = color.toLowerCase();
+    if (customPresetColors.includes(normalized)) return;
+    const updated = [...customPresetColors, normalized];
+    setCustomPresetColors(updated);
+    localStorage.setItem("slideflow_custom_presets", JSON.stringify(updated));
+  };
+
+  const removeCustomPreset = (color: string) => {
+    const updated = customPresetColors.filter((c) => c !== color);
+    setCustomPresetColors(updated);
+    localStorage.setItem("slideflow_custom_presets", JSON.stringify(updated));
+  };
+
+  const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null); // "text" | "shape" | "bg" | null
+  const [pendingPresetColor, setPendingPresetColor] = useState("#000000");
 
   const currentSlide = slides[currentSlideIndex];
 
@@ -248,6 +279,38 @@ export default function SlideEditorPage() {
     observer.observe(slidePreviewContainerRef.current);
     return () => observer.disconnect();
   }, [showLeftPanel]);
+
+  // Auto-fit canvas to available container space
+  useEffect(() => {
+    if (!canvasContainerRef.current) return;
+
+    const calculateFitZoom = () => {
+      if (!canvasContainerRef.current || !autoFitZoom) return;
+      const container = canvasContainerRef.current;
+      const padding = 64; // 32px padding on each side
+      const availableWidth = container.clientWidth - padding;
+      const availableHeight = container.clientHeight - padding;
+
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      const scaleX = availableWidth / 960;
+      const scaleY = availableHeight / 540;
+      const fitScale = Math.min(scaleX, scaleY, 2); // Cap at 200%
+      const fitZoom = Math.max(25, Math.floor(fitScale * 100));
+
+      setZoom(fitZoom);
+    };
+
+    const observer = new ResizeObserver(() => {
+      calculateFitZoom();
+    });
+
+    observer.observe(canvasContainerRef.current);
+    // Run once immediately
+    calculateFitZoom();
+
+    return () => observer.disconnect();
+  }, [showLeftPanel, showRightPanel, autoFitZoom]);
 
   useEffect(() => {
     const loadContent = async () => {
@@ -534,19 +597,31 @@ export default function SlideEditorPage() {
     }
   };
 
-  const fetchContentAssets = async () => {
+  const fetchContentAssets = async (folderId?: string | null) => {
     setIsContentLoading(true);
     try {
-      const response = await fetch("/api/content/assets?");
-      const data = await response.json();
+      const folderParam = folderId ? `folderId=${folderId}` : '';
+      const [assetsRes, foldersRes] = await Promise.all([
+        fetch(`/api/content/assets?${folderParam}`),
+        fetch('/api/content/folders'),
+      ]);
+      const assetsData = await assetsRes.json();
+      const foldersData = await foldersRes.json();
       // Filter only image assets
-      const images = (data.assets || []).filter((a: any) =>
+      const images = (assetsData.assets || []).filter((a: any) =>
         a.type?.startsWith("image") || a.file_url?.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i)
       );
       setContentAssets(images);
+      // Filter folders by parent
+      const allFolders = foldersData.folders || [];
+      const childFolders = allFolders.filter((f: any) =>
+        folderId ? f.parent_id === folderId : !f.parent_id
+      );
+      setContentFolders(childFolders);
     } catch (err) {
       console.error("Error fetching content assets:", err);
       setContentAssets([]);
+      setContentFolders([]);
     }
     setIsContentLoading(false);
   };
@@ -1089,7 +1164,7 @@ export default function SlideEditorPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setZoom(Math.max(25, zoom - 25))}
+                onClick={() => { setZoom(Math.max(25, zoom - 25)); setAutoFitZoom(false); }}
                 className={darkMode ? 'editor-button hover:bg-[#3a4156]' : ''}
               >
                 <span className={`text-xs font-bold ${darkMode ? 'text-white' : ''}`}>-</span>
@@ -1098,11 +1173,28 @@ export default function SlideEditorPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setZoom(Math.min(200, zoom + 25))}
+                onClick={() => { setZoom(Math.min(200, zoom + 25)); setAutoFitZoom(false); }}
                 className={darkMode ? 'editor-button hover:bg-[#3a4156]' : ''}
               >
                 <span className={`text-xs font-bold ${darkMode ? 'text-white' : ''}`}>+</span>
               </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setAutoFitZoom(true)}
+                      className={`${darkMode ? 'editor-button hover:bg-[#3a4156]' : ''} ${autoFitZoom ? 'text-blue-500 bg-blue-50/10' : 'text-gray-400'}`}
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Fit to screen</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             <Button
               variant="outline"
@@ -1240,14 +1332,29 @@ export default function SlideEditorPage() {
                     onChange={handleFileUpload}
                   />
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} className={darkMode ? 'border-white hover:bg-gray-800' : ''}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" className={darkMode ? 'border-white hover:bg-gray-800' : ''}>
                         <Upload className="h-4 w-4" />
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Upload Image/Video</TooltipContent>
-                  </Tooltip>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className={darkMode ? 'bg-gray-900 border-gray-700' : ''}>
+                      <DropdownMenuItem
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        From Computer
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => { setReplaceTargetId(null); setIsContentPickerOpen(true); fetchContentAssets(); }}
+                        className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                      >
+                        <FolderOpen className="mr-2 h-4 w-4" />
+                        From Content Library
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1398,46 +1505,61 @@ export default function SlideEditorPage() {
                         onClick={() => setCurrentSlideIndex(index)}
                       >
 
-                        <div className="absolute top-1/2 left-1/2" style={{ transform: `translate(-50%, -50%) scale(${slidePreviewScale})`, transformOrigin: "center" }}>
-                          <div className="relative w-[960px] h-[540px] overflow-hidden">
-                            {slide.backgroundImage && (
-                              <img
-                                src={slide.backgroundImage}
-                                alt=""
-                                className="absolute inset-0 w-full h-full object-cover z-0"
-                              />
-                            )}
-                            {slide.elements.map((element) => (
-                              <div
-                                key={element.id}
-                                className="absolute"
-                                style={{
-                                  left: element.x,
-                                  top: element.y,
-                                  width: element.width,
-                                  height: element.height,
-                                  ...element.style,
-                                }}
-                              >
-                                {element.type === "text" && (
-                                  <div className="w-full h-full overflow-hidden whitespace-nowrap text-ellipsis px-1">
-                                    {element.content}
-                                  </div>
-                                )}
-                                {element.type === "image" && element.src && (
-                                  <div className="w-full h-full overflow-hidden" style={getCropStyle(element.cropShape)}>
-                                    <img src={element.src} alt="" className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-                                {element.type === "video" && (
-                                  <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                                    <Video className="w-8 h-8 text-white" />
-                                  </div>
-                                )}
-                                {element.type === "shape" && <div className="w-full h-full" style={element.style} />}
-                              </div>
-                            ))}
-                          </div>
+                        <div className="@container absolute inset-0 overflow-hidden">
+                          {slide.backgroundImage && (
+                            <img
+                              src={slide.backgroundImage}
+                              alt=""
+                              className="absolute inset-0 w-full h-full object-cover z-0"
+                            />
+                          )}
+                          {(slide.elements || []).map((element) => (
+                            <div
+                              key={element.id}
+                              className="absolute"
+                              style={{
+                                left: `${(element.x / 960) * 100}%`,
+                                top: `${(element.y / 540) * 100}%`,
+                                width: `${(element.width / 960) * 100}%`,
+                                height: `${(element.height / 540) * 100}%`,
+                                fontSize: element.style.fontSize ? `${(element.style.fontSize / 960) * 100}cqw` : undefined,
+                                color: element.style.color,
+                                fontFamily: `${element.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
+                                fontWeight: element.style.fontWeight,
+                                fontStyle: element.style.fontStyle,
+                                textDecoration: element.style.textDecoration,
+                                backgroundColor: element.type === "shape" ? element.style.backgroundColor : undefined,
+                                borderRadius: element.style.borderRadius,
+                                clipPath: element.style.clipPath,
+                              }}
+                            >
+                              {element.type === "text" && (
+                                <div
+                                  className="w-full h-full flex items-start px-1 overflow-hidden"
+                                  style={{
+                                    justifyContent: element.style.textAlign === "center" ? "center" : element.style.textAlign === "right" ? "flex-end" : "flex-start",
+                                    textAlign: element.style.textAlign as any,
+                                    wordWrap: "break-word",
+                                    overflowWrap: "break-word",
+                                    whiteSpace: "pre-wrap",
+                                    lineHeight: "1.4",
+                                  }}
+                                >
+                                  {element.content}
+                                </div>
+                              )}
+                              {element.type === "image" && element.src && (
+                                <div className="w-full h-full overflow-hidden" style={getCropStyle(element.cropShape)}>
+                                  <img src={element.src} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                              {element.type === "video" && (
+                                <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                                  <Video className="w-6 h-6 text-white" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
 
 
@@ -1478,6 +1600,7 @@ export default function SlideEditorPage() {
 
 
           <div
+            ref={canvasContainerRef}
             className={`flex-1 flex items-center justify-center overflow-auto p-8 ${darkMode
               ? 'bg-gray-950 city-lights'
               : 'bg-muted/50'
@@ -1870,18 +1993,58 @@ export default function SlideEditorPage() {
                               className={`flex-1 h-8 text-xs ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
                             />
                           </div>
-                          <div className="flex gap-2 mt-2 pt-1 border-t border-border/50">
-                            {["#459cca", "#8c9094", "#2b333a"].map((presetColor) => (
-                              <button
-                                key={presetColor}
-                                title={`Brand Preset: ${presetColor}`}
-                                onClick={() => updateElementStyle(selectedElementData.id, { color: presetColor })}
-                                className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
-                                  darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
-                                }`}
-                                style={{ backgroundColor: presetColor }}
-                              />
+                          <div className="flex flex-wrap gap-2 mt-2 pt-1 border-t border-border/50 items-center">
+                            {customPresetColors.map((presetColor) => (
+                              <div key={presetColor} className="relative group/swatch">
+                                <button
+                                  title={presetColor}
+                                  onClick={() => updateElementStyle(selectedElementData.id, { color: presetColor })}
+                                  className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
+                                    darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
+                                  }`}
+                                  style={{ backgroundColor: presetColor }}
+                                />
+                                {(
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeCustomPreset(presetColor); }}
+                                    className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[8px] leading-none flex items-center justify-center opacity-0 group-hover/swatch:opacity-100 transition-opacity"
+                                    title="Remove preset"
+                                  >×</button>
+                                )}
+                              </div>
                             ))}
+                            <div className="relative">
+                              <button
+                                title="Add custom preset color"
+                                onClick={() => { setColorPickerOpen(colorPickerOpen === "text" ? null : "text"); setPendingPresetColor(selectedElementData.style.color || (darkMode ? '#ffffff' : '#000000')); }}
+                                className={`w-6 h-6 rounded-full border-2 border-dashed flex items-center justify-center text-xs cursor-pointer transition-colors ${
+                                  darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
+                                }`}
+                              >+</button>
+                              {colorPickerOpen === "text" && (
+                                <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
+                                  darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                                }`}>
+                                  <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                                  <input
+                                    type="color"
+                                    value={pendingPresetColor}
+                                    onChange={(e) => setPendingPresetColor(e.target.value)}
+                                    className="w-full h-8 rounded cursor-pointer border-0 p-0"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={pendingPresetColor}
+                                    onChange={(e) => setPendingPresetColor(e.target.value)}
+                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                                  />
+                                  <div className="flex gap-1.5 mt-2">
+                                    <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                                    <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1967,18 +2130,58 @@ export default function SlideEditorPage() {
                             className={`flex-1 h-8 text-xs ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
                           />
                         </div>
-                        <div className="flex gap-2 mt-2 pt-1 border-t border-border/50">
-                          {["#459cca", "#8c9094", "#2b333a"].map((presetColor) => (
-                            <button
-                              key={presetColor}
-                              title={`Brand Preset: ${presetColor}`}
-                              onClick={() => updateElementStyle(selectedElementData.id, { backgroundColor: presetColor })}
-                              className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
-                                darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
-                              }`}
-                              style={{ backgroundColor: presetColor }}
-                            />
+                        <div className="flex flex-wrap gap-2 mt-2 pt-1 border-t border-border/50 items-center">
+                          {customPresetColors.map((presetColor) => (
+                            <div key={presetColor} className="relative group/swatch">
+                              <button
+                                title={presetColor}
+                                onClick={() => updateElementStyle(selectedElementData.id, { backgroundColor: presetColor })}
+                                className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
+                                  darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
+                                }`}
+                                style={{ backgroundColor: presetColor }}
+                              />
+                              {(
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeCustomPreset(presetColor); }}
+                                  className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[8px] leading-none flex items-center justify-center opacity-0 group-hover/swatch:opacity-100 transition-opacity"
+                                  title="Remove preset"
+                                >×</button>
+                              )}
+                            </div>
                           ))}
+                          <div className="relative">
+                            <button
+                              title="Add custom preset color"
+                              onClick={() => { setColorPickerOpen(colorPickerOpen === "shape" ? null : "shape"); setPendingPresetColor(selectedElementData.style.backgroundColor || '#3B82F6'); }}
+                              className={`w-6 h-6 rounded-full border-2 border-dashed flex items-center justify-center text-xs cursor-pointer transition-colors ${
+                                darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
+                              }`}
+                            >+</button>
+                            {colorPickerOpen === "shape" && (
+                              <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
+                                darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                              }`}>
+                                <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                                <input
+                                  type="color"
+                                  value={pendingPresetColor}
+                                  onChange={(e) => setPendingPresetColor(e.target.value)}
+                                  className="w-full h-8 rounded cursor-pointer border-0 p-0"
+                                />
+                                <input
+                                    type="text"
+                                    value={pendingPresetColor}
+                                    onChange={(e) => setPendingPresetColor(e.target.value)}
+                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                                  />
+                                <div className="flex gap-1.5 mt-2">
+                                  <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -2033,24 +2236,64 @@ export default function SlideEditorPage() {
                           className={`flex-1 h-8 text-xs ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}`}
                         />
                       </div>
-                      <div className="flex gap-2 mt-2 pt-1 border-t border-border/50">
-                        {["#459cca", "#8c9094", "#2b333a"].map((presetColor) => (
-                          <button
-                            key={presetColor}
-                            title={`Brand Preset: ${presetColor}`}
-                            onClick={() => {
-                              const newSlides = [...slides];
-                              newSlides[currentSlideIndex].backgroundColor = presetColor;
-                              newSlides[currentSlideIndex].backgroundImage = undefined;
-                              setSlides(newSlides);
-                              saveToHistory(newSlides, currentSlideIndex);
-                            }}
-                            className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
-                              darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
-                            }`}
-                            style={{ backgroundColor: presetColor }}
-                          />
+                      <div className="flex flex-wrap gap-2 mt-2 pt-1 border-t border-border/50 items-center">
+                        {customPresetColors.map((presetColor) => (
+                          <div key={presetColor} className="relative group/swatch">
+                            <button
+                              title={presetColor}
+                              onClick={() => {
+                                const newSlides = [...slides];
+                                newSlides[currentSlideIndex].backgroundColor = presetColor;
+                                newSlides[currentSlideIndex].backgroundImage = undefined;
+                                setSlides(newSlides);
+                                saveToHistory(newSlides, currentSlideIndex);
+                              }}
+                              className={`w-6 h-6 rounded-full border shadow-sm cursor-pointer transition-transform hover:scale-110 ${
+                                darkMode ? 'border-gray-500 hover:border-white' : 'border-gray-300 hover:border-gray-500'
+                              }`}
+                              style={{ backgroundColor: presetColor }}
+                            />
+                            {(
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeCustomPreset(presetColor); }}
+                                className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[8px] leading-none flex items-center justify-center opacity-0 group-hover/swatch:opacity-100 transition-opacity"
+                                title="Remove preset"
+                              >×</button>
+                            )}
+                          </div>
                         ))}
+                        <div className="relative">
+                          <button
+                            title="Add custom preset color"
+                            onClick={() => { setColorPickerOpen(colorPickerOpen === "bg" ? null : "bg"); setPendingPresetColor(currentSlide.backgroundColor); }}
+                            className={`w-6 h-6 rounded-full border-2 border-dashed flex items-center justify-center text-xs cursor-pointer transition-colors ${
+                              darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
+                            }`}
+                          >+</button>
+                          {colorPickerOpen === "bg" && (
+                            <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
+                              darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                            }`}>
+                              <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                              <input
+                                type="color"
+                                value={pendingPresetColor}
+                                onChange={(e) => setPendingPresetColor(e.target.value)}
+                                className="w-full h-8 rounded cursor-pointer border-0 p-0"
+                              />
+                              <input
+                                    type="text"
+                                    value={pendingPresetColor}
+                                    onChange={(e) => setPendingPresetColor(e.target.value)}
+                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                                  />
+                              <div className="flex gap-1.5 mt-2">
+                                <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                                <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -2116,25 +2359,73 @@ export default function SlideEditorPage() {
         </Dialog>
 
         {/* Content Library Picker Dialog */}
-        <Dialog open={isContentPickerOpen} onOpenChange={(open) => { setIsContentPickerOpen(open); if (!open) setReplaceTargetId(null); }}>
+        <Dialog open={isContentPickerOpen} onOpenChange={(open) => { setIsContentPickerOpen(open); if (!open) { setReplaceTargetId(null); setCurrentContentFolderId(null); setContentFolderPath([{id: null, name: 'Root'}]); } }}>
           <DialogContent className={`max-w-4xl max-h-[80vh] ${darkMode ? 'bg-gray-900 border-gray-700' : ''}`}>
             <DialogHeader>
               <DialogTitle className={darkMode ? 'text-white' : ''}>Content Library</DialogTitle>
               <DialogDescription className={darkMode ? 'text-gray-400' : ''}>Select an image from your uploaded content</DialogDescription>
             </DialogHeader>
+
+            {/* Breadcrumb navigation */}
+            {contentFolderPath.length > 1 && (
+              <div className={`flex items-center gap-1 text-sm flex-wrap ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                {contentFolderPath.map((crumb, idx) => (
+                  <span key={idx} className="flex items-center gap-1">
+                    {idx > 0 && <ChevronRight className="h-3 w-3" />}
+                    <button
+                      onClick={() => {
+                        const newPath = contentFolderPath.slice(0, idx + 1);
+                        setContentFolderPath(newPath);
+                        setCurrentContentFolderId(crumb.id);
+                        fetchContentAssets(crumb.id);
+                      }}
+                      className={`hover:underline cursor-pointer ${
+                        idx === contentFolderPath.length - 1
+                          ? (darkMode ? 'text-white font-medium' : 'text-gray-900 font-medium')
+                          : ''
+                      }`}
+                    >
+                      {crumb.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <ScrollArea className="h-[400px]">
               {isContentLoading ? (
                 <div className="flex items-center justify-center h-32">
                   <p className={darkMode ? 'text-gray-400' : 'text-muted-foreground'}>Loading content...</p>
                 </div>
-              ) : contentAssets.length === 0 ? (
+              ) : contentFolders.length === 0 && contentAssets.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 gap-2">
                   <FolderOpen className={`h-8 w-8 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
-                  <p className={darkMode ? 'text-gray-400' : 'text-muted-foreground'}>No images found in content library</p>
+                  <p className={darkMode ? 'text-gray-400' : 'text-muted-foreground'}>No content found here</p>
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-muted-foreground/70'}`}>Upload images via the Content section in your dashboard</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
+                  {/* Folders */}
+                  {contentFolders.map((folder: any) => (
+                    <div
+                      key={`folder-${folder.id}`}
+                      className={`aspect-video cursor-pointer rounded overflow-hidden relative flex flex-col items-center justify-center gap-2 border-2 border-dashed transition-colors ${
+                        darkMode
+                          ? 'border-gray-600 bg-gray-800/50 hover:border-blue-500 hover:bg-gray-700/50'
+                          : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:bg-blue-50'
+                      }`}
+                      onClick={() => {
+                        setCurrentContentFolderId(folder.id);
+                        setContentFolderPath((prev) => [...prev, { id: folder.id, name: folder.name }]);
+                        fetchContentAssets(folder.id);
+                      }}
+                    >
+                      <FolderOpen className={`h-8 w-8 ${darkMode ? 'text-blue-400' : 'text-blue-500'}`} />
+                      <span className={`text-sm font-medium truncate max-w-[90%] ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{folder.name}</span>
+                    </div>
+                  ))}
+
+                  {/* Images */}
                   {contentAssets.map((asset: any) => (
                     <div
                       key={asset.id}
@@ -2142,6 +2433,8 @@ export default function SlideEditorPage() {
                       onClick={() => {
                         if (replaceTargetId && asset.file_url) {
                           replaceImage(replaceTargetId, asset.file_url);
+                        } else if (asset.file_url) {
+                          addImage(asset.file_url);
                         }
                         setIsContentPickerOpen(false);
                       }}
@@ -2208,7 +2501,7 @@ export default function SlideEditorPage() {
                   </div>
                   <div className="flex justify-center w-full">
                     <div
-                      className="flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden mb-2 relative"
+                      className="@container flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden mb-2 relative"
                       style={{
                         width: '100%',
                         maxWidth: '800px',
@@ -2217,56 +2510,64 @@ export default function SlideEditorPage() {
                         border: darkMode ? '1px solid #374151' : '1px solid #e5e7eb',
                       }}
                     >
-                      <svg viewBox="0 0 960 540" style={{ width: '100%', height: '100%' }}>
-                        <foreignObject x="0" y="0" width="960" height="540">
-                          <div
-                            style={{
-                              width: 960,
-                              height: 540,
-                              position: 'relative',
-                            }}
-                          >
-                            {templatePreview.slides[0].elements.map((el) => (
-                              <div
-                                key={el.id}
-                                style={{
-                                  position: 'absolute',
-                                  left: el.x,
-                                  top: el.y,
-                                  width: el.width,
-                                  height: el.height,
-                                  backgroundColor: el.style.backgroundColor || 'transparent',
-                                  borderRadius: el.style.borderRadius,
-                                  clipPath: el.style.clipPath,
-                                  overflow: 'hidden',
-                                  display: 'flex',
-                                  alignItems: 'flex-start',
-                                  justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                                }}
-                              >
-                                {el.type === 'text' && (
-                                  <span
-                                    style={{
-                                      fontSize: el.style.fontSize || 16,
-                                      color: el.style.color || '#000',
-                                      fontFamily: `${el.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
-                                      fontWeight: el.style.fontWeight || 'normal',
-                                      fontStyle: el.style.fontStyle || 'normal',
-                                      textAlign: (el.style.textAlign as any) || 'left',
-                                      width: '100%',
-                                      lineHeight: 1.3,
-                                      whiteSpace: 'pre-wrap',
-                                      overflow: 'hidden',
-                                    }}
-                                  >
-                                    {el.content}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </foreignObject>
-                      </svg>
+                      {templatePreview.slides[0].backgroundImage && (
+                        <img
+                          src={templatePreview.slides[0].backgroundImage}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover z-0"
+                        />
+                      )}
+                      {templatePreview.slides[0].elements.map((el) => (
+                        <div
+                          key={el.id}
+                          className="absolute"
+                          style={{
+                            left: `${(el.x / 960) * 100}%`,
+                            top: `${(el.y / 540) * 100}%`,
+                            width: `${(el.width / 960) * 100}%`,
+                            height: `${(el.height / 540) * 100}%`,
+                            fontSize: el.style.fontSize ? `${(el.style.fontSize / 960) * 100}cqw` : undefined,
+                            color: el.style.color,
+                            fontFamily: `${el.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
+                            fontWeight: el.style.fontWeight,
+                            fontStyle: el.style.fontStyle,
+                            textDecoration: el.style.textDecoration,
+                            backgroundColor: el.type === "shape" ? el.style.backgroundColor : undefined,
+                            borderRadius: el.style.borderRadius,
+                            clipPath: el.style.clipPath,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {el.type === 'text' && (
+                            <div
+                              className="w-full h-full flex items-start px-1 overflow-hidden"
+                              style={{
+                                justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                                textAlign: el.style.textAlign as any,
+                                wordWrap: 'break-word',
+                                overflowWrap: 'break-word',
+                                whiteSpace: 'pre-wrap',
+                                lineHeight: '1.4',
+                              }}
+                            >
+                              {el.content}
+                            </div>
+                          )}
+                          {el.type === 'image' && el.src && (
+                            <div className="w-full h-full overflow-hidden" style={getCropStyle(el.cropShape)}>
+                              <img src={el.src} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          {el.type === 'video' && (
+                            <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                              <Video className="w-4 h-4 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                   <div className="flex justify-center gap-3 pt-2">
@@ -2293,7 +2594,7 @@ export default function SlideEditorPage() {
                     >
 
                       <div
-                        className="flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-md overflow-hidden mb-2"
+                        className="@container flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-md overflow-hidden mb-2"
                         style={{
                           width: '100%',
                           aspectRatio: '16/9',
@@ -2301,56 +2602,64 @@ export default function SlideEditorPage() {
                           position: 'relative',
                         }}
                       >
-                        <svg viewBox="0 0 960 540" style={{ width: '100%', height: '100%' }}>
-                          <foreignObject x="0" y="0" width="960" height="540">
-                            <div
-                              style={{
-                                width: 960,
-                                height: 540,
-                                position: 'relative',
-                              }}
-                            >
-                              {template.slides[0].elements.map((el) => {
-                                return (
-                                  <div
-                                    key={el.id}
-                                    style={{
-                                      position: 'absolute',
-                                      left: el.x,
-                                      top: el.y,
-                                      width: el.width,
-                                      height: el.height,
-                                      backgroundColor: el.style.backgroundColor || 'transparent',
-                                      borderRadius: el.style.borderRadius,
-                                      clipPath: el.style.clipPath,
-                                      overflow: 'hidden',
-                                    }}
-                                  >
-                                    {el.type === 'text' && (
-                                      <span
-                                        style={{
-                                          fontSize: el.style.fontSize || 16,
-                                          color: el.style.color || '#000',
-                                          fontFamily: `${el.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
-                                          fontWeight: el.style.fontWeight || 'normal',
-                                          fontStyle: el.style.fontStyle || 'normal',
-                                          textAlign: (el.style.textAlign as any) || 'left',
-                                          width: '100%',
-                                          lineHeight: 1.3,
-                                          whiteSpace: 'pre-wrap',
-                                          overflow: 'hidden',
-                                          display: 'block',
-                                        }}
-                                      >
-                                        {el.content}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </foreignObject>
-                        </svg>
+                        {template.slides[0].backgroundImage && (
+                          <img
+                            src={template.slides[0].backgroundImage}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover z-0"
+                          />
+                        )}
+                        {template.slides[0].elements.map((el) => (
+                          <div
+                            key={el.id}
+                            className="absolute"
+                            style={{
+                              left: `${(el.x / 960) * 100}%`,
+                              top: `${(el.y / 540) * 100}%`,
+                              width: `${(el.width / 960) * 100}%`,
+                              height: `${(el.height / 540) * 100}%`,
+                              fontSize: el.style.fontSize ? `${(el.style.fontSize / 960) * 100}cqw` : undefined,
+                              color: el.style.color,
+                              fontFamily: `${el.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
+                              fontWeight: el.style.fontWeight,
+                              fontStyle: el.style.fontStyle,
+                              textDecoration: el.style.textDecoration,
+                              backgroundColor: el.type === "shape" ? el.style.backgroundColor : undefined,
+                              borderRadius: el.style.borderRadius,
+                              clipPath: el.style.clipPath,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {el.type === 'text' && (
+                              <div
+                                className="w-full h-full flex items-start px-1 overflow-hidden"
+                                style={{
+                                  justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                                  textAlign: el.style.textAlign as any,
+                                  wordWrap: 'break-word',
+                                  overflowWrap: 'break-word',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: '1.4',
+                                }}
+                              >
+                                {el.content}
+                              </div>
+                            )}
+                            {el.type === 'image' && el.src && (
+                              <div className="w-full h-full overflow-hidden" style={getCropStyle(el.cropShape)}>
+                                <img src={el.src} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            {el.type === 'video' && (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                                <Video className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                       <p className={`text-xs font-semibold truncate ${darkMode ? 'text-white' : ''}`}>{template.name}</p>
                       <p className={`text-[10px] truncate ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>{template.genre}</p>
