@@ -8,6 +8,7 @@ export interface SlideElement {
     height: number;
     content?: string;
     src?: string;
+    cropShape?: string;
     style: {
         fontSize?: number;
         color?: string;
