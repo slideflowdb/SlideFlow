@@ -225,13 +225,27 @@ export default function SlideEditorPage() {
   const [contentFolders, setContentFolders] = useState<any[]>([]);
   const [currentContentFolderId, setCurrentContentFolderId] = useState<string | null>(null);
   const [contentFolderPath, setContentFolderPath] = useState<{id: string | null, name: string}[]>([{id: null, name: 'Root'}]);
-  const [customPresetColors, setCustomPresetColors] = useState<string[]>(["#459cca", "#8c9094", "#2b333a"]);
+  const [customPresetColors, setCustomPresetColors] = useState<string[]>([
+    "#000000", "#459cca", "#8c9094", "#2b333a", "#ef4444", 
+    "#f97316", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", 
+    "#ec4899", "#64748b", "#ffffff"
+  ]);
 
-  // Load custom presets from localStorage (defaults are the initial 3 above)
+  // Load custom presets from localStorage, merging with our expanded defaults
   useEffect(() => {
     try {
       const saved = localStorage.getItem("slideflow_custom_presets");
-      if (saved) setCustomPresetColors(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const defaultColors = [
+          "#000000", "#459cca", "#8c9094", "#2b333a", "#ef4444", 
+          "#f97316", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", 
+          "#ec4899", "#64748b", "#ffffff"
+        ];
+        const merged = Array.from(new Set([...defaultColors, ...parsed]));
+        setCustomPresetColors(merged);
+        localStorage.setItem("slideflow_custom_presets", JSON.stringify(merged));
+      }
     } catch {}
   }, []);
 
@@ -1601,7 +1615,7 @@ export default function SlideEditorPage() {
 
           <div
             ref={canvasContainerRef}
-            className={`flex-1 flex items-center justify-center overflow-auto p-8 ${darkMode
+            className={`flex-1 flex overflow-auto p-8 ${darkMode
               ? 'bg-gray-950 city-lights'
               : 'bg-muted/50'
               }`}
@@ -1611,7 +1625,7 @@ export default function SlideEditorPage() {
           >
             <div
               ref={canvasRef}
-              className={`relative shadow-lg overflow-hidden ${darkMode ? 'editor-canvas' : ''}`}
+              className={`relative shadow-lg overflow-hidden m-auto shrink-0 ${darkMode ? 'editor-canvas' : ''}`}
               style={{
                 width: `${960 * (zoom / 100)}px`,
                 height: `${540 * (zoom / 100)}px`,
@@ -2013,39 +2027,39 @@ export default function SlideEditorPage() {
                                 )}
                               </div>
                             ))}
-                            <div className="relative">
-                              <button
-                                title="Add custom preset color"
-                                onClick={() => { setColorPickerOpen(colorPickerOpen === "text" ? null : "text"); setPendingPresetColor(selectedElementData.style.color || (darkMode ? '#ffffff' : '#000000')); }}
-                                className={`w-6 h-6 rounded-full border-2 border-dashed flex items-center justify-center text-xs cursor-pointer transition-colors ${
-                                  darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
-                                }`}
-                              >+</button>
-                              {colorPickerOpen === "text" && (
-                                <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
-                                  darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                                }`}>
-                                  <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
-                                  <input
-                                    type="color"
-                                    value={pendingPresetColor}
-                                    onChange={(e) => setPendingPresetColor(e.target.value)}
-                                    className="w-full h-8 rounded cursor-pointer border-0 p-0"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={pendingPresetColor}
-                                    onChange={(e) => setPendingPresetColor(e.target.value)}
-                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
-                                  />
-                                  <div className="flex gap-1.5 mt-2">
-                                    <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
-                                    <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
-                                  </div>
-                                </div>
-                              )}
+                                <button
+                                  title="Add custom preset color"
+                                  onClick={() => { setColorPickerOpen(colorPickerOpen === "text" ? null : "text"); setPendingPresetColor(selectedElementData.style.color || (darkMode ? '#ffffff' : '#000000')); }}
+                                  className={`w-6 h-6 rounded-full border-2 border-dashed flex items-center justify-center text-xs cursor-pointer transition-colors ${
+                                    darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
+                                  }`}
+                                >+</button>
                             </div>
-                          </div>
+                          {colorPickerOpen === "text" && (
+                            <div className={`mt-3 p-3 rounded-lg shadow-sm border ${
+                              darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                            }`}>
+                              <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="color"
+                                  value={pendingPresetColor}
+                                  onChange={(e) => setPendingPresetColor(e.target.value)}
+                                  className="w-10 h-8 rounded cursor-pointer border px-0.5 py-0.5"
+                                />
+                                <input
+                                  type="text"
+                                  value={pendingPresetColor}
+                                  onChange={(e) => setPendingPresetColor(e.target.value)}
+                                  className={`flex-1 text-xs text-center border rounded px-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                                />
+                              </div>
+                              <div className="flex gap-1.5 mt-2">
+                                <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                                <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div>
@@ -2158,31 +2172,33 @@ export default function SlideEditorPage() {
                                 darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
                               }`}
                             >+</button>
-                            {colorPickerOpen === "shape" && (
-                              <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
-                                darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                              }`}>
-                                <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
-                                <input
-                                  type="color"
-                                  value={pendingPresetColor}
-                                  onChange={(e) => setPendingPresetColor(e.target.value)}
-                                  className="w-full h-8 rounded cursor-pointer border-0 p-0"
-                                />
-                                <input
-                                    type="text"
-                                    value={pendingPresetColor}
-                                    onChange={(e) => setPendingPresetColor(e.target.value)}
-                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
-                                  />
-                                <div className="flex gap-1.5 mt-2">
-                                  <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
-                                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
+                        {colorPickerOpen === "shape" && (
+                          <div className={`mt-3 p-3 rounded-lg shadow-sm border ${
+                            darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                          }`}>
+                            <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="color"
+                                value={pendingPresetColor}
+                                onChange={(e) => setPendingPresetColor(e.target.value)}
+                                className="w-10 h-8 rounded cursor-pointer border px-0.5 py-0.5"
+                              />
+                              <input
+                                type="text"
+                                value={pendingPresetColor}
+                                onChange={(e) => setPendingPresetColor(e.target.value)}
+                                className={`flex-1 text-xs text-center border rounded px-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                              />
+                            </div>
+                            <div className="flex gap-1.5 mt-2">
+                              <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                              <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2270,31 +2286,33 @@ export default function SlideEditorPage() {
                               darkMode ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white' : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600'
                             }`}
                           >+</button>
-                          {colorPickerOpen === "bg" && (
-                            <div className={`absolute bottom-full left-0 mb-2 p-3 rounded-lg shadow-xl border z-50 ${
-                              darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                            }`}>
-                              <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
-                              <input
-                                type="color"
-                                value={pendingPresetColor}
-                                onChange={(e) => setPendingPresetColor(e.target.value)}
-                                className="w-full h-8 rounded cursor-pointer border-0 p-0"
-                              />
-                              <input
-                                    type="text"
-                                    value={pendingPresetColor}
-                                    onChange={(e) => setPendingPresetColor(e.target.value)}
-                                    className={`w-full text-xs text-center mt-1 border rounded px-1 py-0.5 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
-                                  />
-                              <div className="flex gap-1.5 mt-2">
-                                <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
-                                <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
+                      {colorPickerOpen === "bg" && (
+                        <div className={`mt-3 p-3 rounded-lg shadow-sm border ${
+                          darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                        }`}>
+                          <label className={`text-xs font-medium block mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Pick a color</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="color"
+                              value={pendingPresetColor}
+                              onChange={(e) => setPendingPresetColor(e.target.value)}
+                              className="w-10 h-8 rounded cursor-pointer border px-0.5 py-0.5"
+                            />
+                            <input
+                              type="text"
+                              value={pendingPresetColor}
+                              onChange={(e) => setPendingPresetColor(e.target.value)}
+                              className={`flex-1 text-xs text-center border rounded px-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                            />
+                          </div>
+                          <div className="flex gap-1.5 mt-2">
+                            <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setColorPickerOpen(null)}>Cancel</Button>
+                            <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => { addCustomPreset(pendingPresetColor); setColorPickerOpen(null); }}>Save</Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
 
