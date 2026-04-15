@@ -494,8 +494,8 @@ export default function ScreensPage() {
         {!isLoading && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[...shows].sort((a, b) => {
-              const dateA = new Date(a.created_at).getTime();
-              const dateB = new Date(b.created_at).getTime();
+              const dateA = new Date(a.updated_at || a.created_at).getTime();
+              const dateB = new Date(b.updated_at || b.created_at).getTime();
               return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
             }).map((show, index) => {
               const previewSlide = getPreviewSlide(show);

@@ -142,6 +142,7 @@ const CROP_SHAPES: { id: string; label: string; icon: string; css: React.CSSProp
   { id: "circle", label: "Circle", icon: "○", css: { borderRadius: "50%" } },
   { id: "oval", label: "Oval", icon: "⬮", css: { borderRadius: "50%" } },
   { id: "rounded", label: "Rounded", icon: "▢", css: { borderRadius: "12%" } },
+  { id: "triangle", label: "Triangle", icon: "△", css: { clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" } },
   { id: "diamond", label: "Diamond", icon: "◇", css: { clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" } },
   { id: "star", label: "Star", icon: "☆", css: { clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)" } },
   { id: "hexagon", label: "Hexagon", icon: "⬡", css: { clipPath: "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)" } },
@@ -1615,7 +1616,7 @@ export default function SlideEditorPage() {
 
           <div
             ref={canvasContainerRef}
-            className={`flex-1 flex overflow-auto p-8 ${darkMode
+            className={`flex-1 flex min-w-0 min-h-0 overflow-auto p-8 ${darkMode
               ? 'bg-gray-950 city-lights'
               : 'bg-muted/50'
               }`}
@@ -1624,70 +1625,79 @@ export default function SlideEditorPage() {
             onMouseLeave={handleMouseUp}
           >
             <div
-              ref={canvasRef}
-              className={`relative shadow-lg overflow-hidden m-auto shrink-0 ${darkMode ? 'editor-canvas' : ''}`}
+              className="m-auto shrink-0"
               style={{
                 width: `${960 * (zoom / 100)}px`,
                 height: `${540 * (zoom / 100)}px`,
-                backgroundColor: currentSlide.backgroundColor,
               }}
-              onClick={() => { setSelectedElement(null); setEditingTextId(null); setShowShapesMenu(false); setImageContextMenu(null); setShowCropSubmenu(false); setShowReplaceSubmenu(false); }}
             >
-              {currentSlide.backgroundImage && (
-                <img
-                  src={currentSlide.backgroundImage}
-                  alt="Background"
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
-                />
-              )}
-              {currentSlide.elements.map((element) => (
-                <div
-                  key={element.id}
-                  className={`absolute ${selectedElement === element.id
-                    ? darkMode
-                      ? 'ring-2 ring-offset-2'
-                      : 'ring-2 ring-primary ring-offset-2'
-                    : ''
-                    }`}
-                  style={{
-                    left: `${element.x * (zoom / 100)}px`,
-                    top: `${element.y * (zoom / 100)}px`,
-                    width: `${element.width * (zoom / 100)}px`,
-                    height: `${element.height * (zoom / 100)}px`,
-                    fontSize: element.style.fontSize ? `${element.style.fontSize * (zoom / 100)}px` : undefined,
-                    color: element.style.color,
-                    fontFamily: `${element.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
-                    fontWeight: element.style.fontWeight,
-                    fontStyle: element.style.fontStyle,
-                    textAlign: element.style.textAlign as any,
-                    textDecoration: element.style.textDecoration,
-                    backgroundColor: element.type === "shape" ? element.style.backgroundColor : undefined,
-                    borderRadius: element.style.borderRadius,
-                    clipPath: element.style.clipPath,
-                    cursor: isDragging ? 'grabbing' : 'grab',
-                  }}
-                  onMouseDown={(e) => handleMouseDown(e, element.id)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (element.type === "image" && selectedElement === element.id && !isDragging) {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        setImageContextMenu({
-                          elementId: element.id,
-                          x: e.clientX - rect.left,
-                          y: e.clientY - rect.top,
-                        });
+              <div
+                ref={canvasRef}
+                className={`relative shadow-lg overflow-hidden ${darkMode ? 'editor-canvas' : ''}`}
+                style={{
+                  width: '960px',
+                  height: '540px',
+                  backgroundColor: currentSlide.backgroundColor,
+                  transform: `scale(${zoom / 100})`,
+                  transformOrigin: 'top left',
+                }}
+                onClick={() => { setSelectedElement(null); setEditingTextId(null); setShowShapesMenu(false); setImageContextMenu(null); setShowCropSubmenu(false); setShowReplaceSubmenu(false); }}
+              >
+                {currentSlide.backgroundImage && (
+                  <img
+                    src={currentSlide.backgroundImage}
+                    alt="Background"
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0"
+                  />
+                )}
+                {currentSlide.elements.map((element) => (
+                  <div
+                    key={element.id}
+                    className={`absolute ${selectedElement === element.id
+                      ? darkMode
+                        ? 'ring-2 ring-offset-2'
+                        : 'ring-2 ring-primary ring-offset-2'
+                      : ''
+                      }`}
+                    style={{
+                      left: `${element.x}px`,
+                      top: `${element.y}px`,
+                      width: `${element.width}px`,
+                      height: `${element.height}px`,
+                      fontSize: element.style.fontSize ? `${element.style.fontSize}px` : undefined,
+                      color: element.style.color,
+                      fontFamily: `${element.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
+                      fontWeight: element.style.fontWeight,
+                      fontStyle: element.style.fontStyle,
+                      textAlign: element.style.textAlign as any,
+                      textDecoration: element.style.textDecoration,
+                      backgroundColor: element.type === "shape" ? element.style.backgroundColor : undefined,
+                      borderRadius: element.style.borderRadius,
+                      clipPath: element.style.clipPath,
+                      cursor: isDragging ? 'grabbing' : 'grab',
+                    }}
+                    onMouseDown={(e) => handleMouseDown(e, element.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (element.type === "image" && selectedElement === element.id && !isDragging) {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          setImageContextMenu({
+                            elementId: element.id,
+                            x: (e.clientX - rect.left) / (zoom / 100),
+                            y: (e.clientY - rect.top) / (zoom / 100),
+                          });
+                          setShowCropSubmenu(false);
+                        }
+                      } else {
+                        setImageContextMenu(null);
                         setShowCropSubmenu(false);
                       }
-                    } else {
-                      setImageContextMenu(null);
-                      setShowCropSubmenu(false);
-                    }
-                  }}
-                >
-                  {element.type === "text" && (
-                    <div
-                      className={`w-full h-full flex items-start outline-none overflow-hidden ${editingTextId === element.id ? 'cursor-text' : 'cursor-grab'}`}
+                    }}
+                  >
+                    {element.type === "text" && (
+                      <div
+                        className={`w-full h-full flex items-start outline-none overflow-hidden ${editingTextId === element.id ? 'cursor-text' : 'cursor-grab'}`}
                       style={{
                         justifyContent: element.style.textAlign === "center" ? "center" : element.style.textAlign === "right" ? "flex-end" : "flex-start",
                         textDecoration: element.style.textDecoration,
@@ -1761,6 +1771,8 @@ export default function SlideEditorPage() {
                   style={{
                     left: imageContextMenu.x,
                     top: imageContextMenu.y,
+                    transform: `scale(${100 / zoom})`,
+                    transformOrigin: 'top left',
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1883,6 +1895,7 @@ export default function SlideEditorPage() {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
 
@@ -2128,8 +2141,43 @@ export default function SlideEditorPage() {
 
 
                     {selectedElementData.type === "shape" && (
-                      <div>
-                        <label className={`text-xs font-medium ${darkMode ? 'text-gray-400' : ''}`}>Background Color</label>
+                      <div className="space-y-4">
+                        <div>
+                          <label className={`text-xs font-medium ${darkMode ? 'text-gray-400' : ''}`}>Shape Type</label>
+                          <div className="grid grid-cols-4 gap-1 mt-1">
+                            {CROP_SHAPES.map((shape) => {
+                              const isActive = 
+                                (selectedElementData.style.borderRadius || "") === (shape.css.borderRadius || "") &&
+                                (selectedElementData.style.clipPath || "") === (shape.css.clipPath || "");
+                              
+                              if (shape.id === 'oval') return null;
+
+                              return (
+                                <Tooltip key={shape.id}>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant={isActive ? "default" : "outline"}
+                                      size="sm"
+                                      className={`px-0 py-0 h-8 ${darkMode && !isActive ? 'border-gray-600 hover:bg-gray-800 text-gray-300' : ''}`}
+                                      onClick={() => {
+                                        updateElementStyle(selectedElementData.id, {
+                                          borderRadius: shape.css.borderRadius ? String(shape.css.borderRadius) : undefined,
+                                          clipPath: shape.css.clipPath ? String(shape.css.clipPath) : undefined
+                                        });
+                                      }}
+                                    >
+                                      <span className="text-lg leading-none">{shape.icon}</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{shape.label}</TooltipContent>
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className={`text-xs font-medium ${darkMode ? 'text-gray-400' : ''}`}>Background Color</label>
                         <div className="flex gap-2 mt-1">
                           <Input
                             type="color"
@@ -2145,6 +2193,15 @@ export default function SlideEditorPage() {
                           />
                         </div>
                         <div className="flex flex-wrap gap-2 mt-2 pt-1 border-t border-border/50 items-center">
+                          <button
+                            title="None (Transparent)"
+                            onClick={() => updateElementStyle(selectedElementData.id, { backgroundColor: 'transparent' })}
+                            className={`w-6 h-6 rounded-full border shadow-sm flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative overflow-hidden ${
+                              darkMode ? 'border-gray-500 hover:border-white bg-gray-800' : 'border-gray-300 hover:border-gray-500 bg-white'
+                            }`}
+                          >
+                            <div className="absolute w-8 h-8 border-t-2 border-red-500 transform rotate-45"></div>
+                          </button>
                           {customPresetColors.map((presetColor) => (
                             <div key={presetColor} className="relative group/swatch">
                               <button
@@ -2200,9 +2257,10 @@ export default function SlideEditorPage() {
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                ) : (
+                    </div>
+                  )}
+                </div>
+              ) : (
                   <div className="p-4 space-y-4">
                     <div>
                       <label className={`text-xs font-medium ${darkMode ? 'text-gray-400' : ''}`}>Slide Duration</label>
@@ -2253,6 +2311,21 @@ export default function SlideEditorPage() {
                         />
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2 pt-1 border-t border-border/50 items-center">
+                        <button
+                          title="None (Transparent)"
+                          onClick={() => {
+                            const newSlides = [...slides];
+                            newSlides[currentSlideIndex].backgroundColor = 'transparent';
+                            newSlides[currentSlideIndex].backgroundImage = undefined;
+                            setSlides(newSlides);
+                            saveToHistory(newSlides, currentSlideIndex);
+                          }}
+                          className={`w-6 h-6 rounded-full border shadow-sm flex items-center justify-center cursor-pointer transition-transform hover:scale-110 relative overflow-hidden ${
+                            darkMode ? 'border-gray-500 hover:border-white bg-gray-800' : 'border-gray-300 hover:border-gray-500 bg-white'
+                          }`}
+                        >
+                          <div className="absolute w-8 h-8 border-t-2 border-red-500 transform rotate-45"></div>
+                        </button>
                         {customPresetColors.map((presetColor) => (
                           <div key={presetColor} className="relative group/swatch">
                             <button

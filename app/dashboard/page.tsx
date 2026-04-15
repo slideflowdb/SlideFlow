@@ -368,7 +368,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {shows.slice(0, 5).map((show) => {
+                {[...shows].sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).slice(0, 5).map((show) => {
                   const slideCount = Array.isArray(show.slides_data) ? show.slides_data.length : 0;
                   return (
                     <div key={show.id} className="flex items-center justify-between p-3 border rounded-lg">
