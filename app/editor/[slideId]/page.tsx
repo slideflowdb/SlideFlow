@@ -1698,11 +1698,13 @@ export default function SlideEditorPage() {
                       cursor: isDragging ? 'grabbing' : 'grab',
                     }}
                     onMouseDown={(e) => handleMouseDown(e, element.id)}
-                    onClick={(e) => {
+                    onContextMenu={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
-                      if (element.type === "image" && selectedElement === element.id && !isDragging) {
+                      if (element.type === "image" && !isDragging) {
                         const rect = canvasRef.current?.getBoundingClientRect();
                         if (rect) {
+                          setSelectedElement(element.id);
                           setImageContextMenu({
                             elementId: element.id,
                             x: (e.clientX - rect.left) / (zoom / 100),
@@ -1710,7 +1712,11 @@ export default function SlideEditorPage() {
                           });
                           setShowCropSubmenu(false);
                         }
-                      } else {
+                      }
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (imageContextMenu) {
                         setImageContextMenu(null);
                         setShowCropSubmenu(false);
                       }
