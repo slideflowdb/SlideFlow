@@ -69,6 +69,7 @@ import {
   HardDrive,
   FolderOpen,
   ImageIcon as ImageLucide,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -84,6 +85,9 @@ interface SlideElement {
   content?: string;
   src?: string;
   cropShape?: string;
+  cropX?: number;
+  cropY?: number;
+  cropScale?: number;
   style: {
     fontSize?: number;
     color?: string;
@@ -164,6 +168,8 @@ export default function SlideEditorPage() {
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedTool, setSelectedTool] = useState("select");
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [croppingImageId, setCroppingImageId] = useState<string | null>(null);
+  const [imageCropDrag, setImageCropDrag] = useState<{ x: number, y: number, startCropX: number, startCropY: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null);
@@ -858,6 +864,17 @@ export default function SlideEditorPage() {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (imageCropDrag && croppingImageId) {
+      e.stopPropagation();
+      const deltaX = (e.clientX - imageCropDrag.x) / (zoom / 100);
+      const deltaY = (e.clientY - imageCropDrag.y) / (zoom / 100);
+      updateElement(croppingImageId, { 
+        cropX: imageCropDrag.startCropX + deltaX,
+        cropY: imageCropDrag.startCropY + deltaY
+      });
+      return;
+    }
+
     if (isDragging && selectedElement) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
@@ -895,6 +912,10 @@ export default function SlideEditorPage() {
   };
 
   const handleMouseUp = () => {
+    if (imageCropDrag) {
+      setImageCropDrag(null);
+      saveToHistory(slides, currentSlideIndex);
+    }
     if (isDragging) {
       setIsDragging(false);
       saveToHistory(slides, currentSlideIndex);
@@ -1641,7 +1662,7 @@ export default function SlideEditorPage() {
                   transform: `scale(${zoom / 100})`,
                   transformOrigin: 'top left',
                 }}
-                onClick={() => { setSelectedElement(null); setEditingTextId(null); setShowShapesMenu(false); setImageContextMenu(null); setShowCropSubmenu(false); setShowReplaceSubmenu(false); }}
+                onClick={() => { setSelectedElement(null); setEditingTextId(null); setShowShapesMenu(false); setImageContextMenu(null); setShowCropSubmenu(false); setShowReplaceSubmenu(false); setCroppingImageId(null); }}
               >
                 {currentSlide.backgroundImage && (
                   <img
@@ -1730,13 +1751,54 @@ export default function SlideEditorPage() {
                     </div>
                   )}
                   {element.type === "image" && element.src && (
-                    <div className="w-full h-full overflow-hidden" style={getCropStyle(element.cropShape)}>
+                    <div 
+                      className={`w-full h-full overflow-hidden ${croppingImageId === element.id ? 'ring-2 ring-blue-500 ring-inset opacity-90' : ''}`} 
+                      style={getCropStyle(element.cropShape)}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setCroppingImageId(croppingImageId === element.id ? null : element.id);
+                        if (croppingImageId !== element.id) setSelectedElement(element.id);
+                      }}
+                    >
                       <img
                         src={element.src}
                         alt=""
-                        className="w-full h-full object-cover pointer-events-none"
+                        className="w-full h-full object-cover"
+                        style={{
+                          transform: `translate(${element.cropX || 0}px, ${element.cropY || 0}px) scale(${element.cropScale || 1})`,
+                          pointerEvents: croppingImageId === element.id ? 'auto' : 'none',
+                          cursor: croppingImageId === element.id ? (imageCropDrag ? 'grabbing' : 'grab') : 'default'
+                        }}
                         draggable={false}
+                        onMouseDown={(e) => {
+                          if (croppingImageId === element.id) {
+                            e.stopPropagation();
+                            setImageCropDrag({ x: e.clientX, y: e.clientY, startCropX: element.cropX || 0, startCropY: element.cropY || 0 });
+                          }
+                        }}
                       />
+                      {croppingImageId === element.id && (
+                        <div 
+                          className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 p-1.5 rounded-md shadow-lg flex items-center gap-1.5 border border-gray-200 dark:border-gray-700 z-[100] cursor-default pointer-events-auto" 
+                          onMouseDown={e => e.stopPropagation()} 
+                          onClick={e => e.stopPropagation()}
+                          onDoubleClick={e => e.stopPropagation()}
+                        >
+                           <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 ml-1">Scale</span>
+                           <input 
+                             type="range" 
+                             min="0.1" 
+                             max="5" 
+                             step="0.05" 
+                             value={element.cropScale || 1} 
+                             onChange={(e) => updateElement(element.id, { cropScale: parseFloat(e.target.value) })} 
+                             className="w-20" 
+                           />
+                           <Button size="icon" variant="ghost" className="h-5 w-5 ml-0.5" onClick={() => setCroppingImageId(null)}>
+                             <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
+                           </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                   {element.type === "video" && element.src && (
@@ -1892,6 +1954,22 @@ export default function SlideEditorPage() {
                         </div>
                       </div>
                     )}
+                    <div className={`h-px ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                    <button
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                        darkMode
+                          ? 'text-white hover:bg-gray-800'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                      onClick={() => {
+                        setCroppingImageId(imageContextMenu.elementId);
+                        if (croppingImageId !== imageContextMenu.elementId) setSelectedElement(imageContextMenu.elementId);
+                        setImageContextMenu(null);
+                      }}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                      Manual Crop
+                    </button>
                   </div>
                 </div>
               )}

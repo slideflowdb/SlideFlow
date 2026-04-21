@@ -75,6 +75,30 @@ export default function DashboardPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (shows.length > 0) {
+      const hasNotifiedStale = sessionStorage.getItem("slideflow_stale_notified");
+      if (!hasNotifiedStale) {
+        const sorted = [...shows].sort((a, b) => new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime());
+        const stalest = sorted[0];
+        
+        if (stalest) {
+          const daysOld = Math.floor((new Date().getTime() - new Date(stalest.updated_at || stalest.created_at).getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysOld > 0) {
+            setTimeout(() => {
+              toast.warning("Stale Presentation Warning", {
+                description: `"${stalest.name || 'Untitled'}" hasn't been modified in ${daysOld} day${daysOld === 1 ? '' : 's'}. Consider updating or deleting it.`,
+                duration: 8000,
+              });
+            }, 3000);
+          }
+        }
+        sessionStorage.setItem("slideflow_stale_notified", "true");
+      }
+    }
+  }, [shows]);
+
   const handleStopPresent = async () => {
     setIsStopping(true);
     try {

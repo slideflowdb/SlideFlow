@@ -249,7 +249,10 @@ export default function DisplayPage() {
                   <img
                     src={element.src}
                     alt=""
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-cover"
+                    style={{
+                      transform: `translate(${element.cropX || 0}px, ${element.cropY || 0}px) scale(${element.cropScale || 1})`,
+                    }}
                   />
                 </div>
               )}
@@ -319,14 +322,14 @@ export default function DisplayPage() {
 
       {slides.length === 0 && (
         <div className="w-full h-full flex flex-col items-center justify-center bg-[#10161a] absolute inset-0 z-50">
-          <svg viewBox="0 0 500 150" xmlns="http://www.w3.org/2000/svg" className="w-[300px] md:w-[500px] opacity-90 mb-6">
+          <svg viewBox="0 0 750 150" xmlns="http://www.w3.org/2000/svg" className="w-[340px] md:w-[600px] opacity-90 mb-6">
             <g transform="translate(20, 20)">
               <circle cx="80" cy="35" r="22" fill="#459cca" />
               <path d="M 35 100 A 25 25 0 0 1 60 75 Q 80 95 100 75 A 25 25 0 0 1 125 100 A 25 25 0 0 1 100 125 Q 80 115 60 125 A 25 25 0 0 1 35 100 Z" fill="#8c9094" />
               <path d="M 60 75 Q 80 95 100 75 Q 80 65 60 75 Z" fill="#459cca" />
               <text x="160" y="65" fontFamily="Arial, Helvetica, sans-serif" fontSize="48" fill="#459cca" letterSpacing="2" fontWeight="500">STRATUS</text>
-              <text x="160" y="115" fontFamily="Arial, Helvetica, sans-serif" fontSize="40" fill="#8c9094" letterSpacing="4" fontWeight="400">ADV</text>
-              <line x1="260" y1="105" x2="450" y2="105" stroke="#8c9094" strokeWidth="2" />
+              <text x="160" y="115" fontFamily="Arial, Helvetica, sans-serif" fontSize="36" fill="#8c9094" letterSpacing="4" fontWeight="400">ADVANCE TECHNOLOGY</text>
+              <line x1="700" y1="105" x2="720" y2="105" stroke="#8c9094" strokeWidth="2" />
             </g>
           </svg>
           <Button 
