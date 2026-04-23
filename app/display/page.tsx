@@ -16,6 +16,9 @@ interface SlideElement {
   content?: string;
   src?: string;
   cropShape?: string;
+  cropX?: number;
+  cropY?: number;
+  cropScale?: number;
   style: {
     fontSize?: number;
     color?: string;
