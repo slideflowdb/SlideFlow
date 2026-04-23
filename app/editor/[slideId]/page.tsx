@@ -964,37 +964,93 @@ export default function SlideEditorPage() {
     }
   };
 
+  const uploadBase64Image = async (base64: string): Promise<string> => {
+    // Convert base64 data URL to a Blob
+    const response = await fetch(base64);
+    const blob = await response.blob();
+
+    const formData = new FormData();
+    formData.append("file", blob, `slide-image-${Date.now()}.${blob.type.split("/")[1] || "png"}`);
+
+    const res = await fetch("/api/slides/upload-image", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error("Image upload failed");
+    const data = await res.json();
+    return data.url;
+  };
+
   const saveSlide = async () => {
     setIsSaving(true);
     setSaveMessage(null);
     try {
+      // Deep clone slides so we don't mutate state
+      const slidesToSave: Slide[] = JSON.parse(JSON.stringify(slides));
+
+      // Upload any base64 images to storage and replace with URLs
+      for (const slide of slidesToSave) {
+        for (const element of slide.elements) {
+          if (
+            (element.type === "image" || element.type === "video") &&
+            element.src &&
+            element.src.startsWith("data:")
+          ) {
+            try {
+              const url = await uploadBase64Image(element.src);
+              element.src = url;
+            } catch (uploadErr) {
+              console.error("[Save] Failed to upload image, keeping base64:", uploadErr);
+            }
+          }
+        }
+        // Also handle background images
+        if (slide.backgroundImage && slide.backgroundImage.startsWith("data:")) {
+          try {
+            const url = await uploadBase64Image(slide.backgroundImage);
+            slide.backgroundImage = url;
+          } catch (uploadErr) {
+            console.error("[Save] Failed to upload background image:", uploadErr);
+          }
+        }
+      }
+
+      // Update local state with the storage URLs so future saves are fast
+      setSlides(slidesToSave);
+
+      const payload = JSON.stringify({
+        id: savedShowId,
+        contentId: params.slideId === "new" ? undefined : params.slideId,
+        name: slideName,
+        slidesData: slidesToSave,
+        startTime: scheduleStart ? new Date(scheduleStart).toISOString() : null,
+        finishTime: scheduleFinish ? new Date(scheduleFinish).toISOString() : null,
+      });
+
+      console.log(`[Save] Payload size: ${(payload.length / 1024 / 1024).toFixed(2)} MB`);
+
       const response = await fetch("/api/shows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: savedShowId,
-          contentId: params.slideId === "new" ? undefined : params.slideId,
-          name: slideName,
-          slidesData: slides,
-          startTime: scheduleStart ? new Date(scheduleStart).toISOString() : null,
-          finishTime: scheduleFinish ? new Date(scheduleFinish).toISOString() : null,
-        }),
+        body: payload,
       });
 
-      if (!response.ok) throw new Error("Failed to save");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Save] HTTP ${response.status}: ${errorText}`);
+        throw new Error(`Failed to save (${response.status})`);
+      }
 
       const data = await response.json();
       if (data.show?.id) {
         setSavedShowId(data.show.id);
-
 
         if (params.slideId === "new") {
           window.history.replaceState(null, "", `/editor/${data.show.id}`);
         }
       }
 
-
-      saveToHistory(slides, currentSlideIndex, true);
+      saveToHistory(slidesToSave, currentSlideIndex, true);
       setHasUnsavedChanges(false);
 
       setSaveMessage("Saved!");
