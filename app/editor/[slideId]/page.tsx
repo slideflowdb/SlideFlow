@@ -157,6 +157,149 @@ function getCropStyle(cropShape?: string): React.CSSProperties {
   return shape?.css || {};
 }
 
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || isNaN(seconds)) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function VideoPlayer({ src, isSelected }: { src: string; isSelected: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [showControls, setShowControls] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
+
+  const togglePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play();
+      setIsPlaying(true);
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    const time = parseFloat(e.target.value);
+    video.currentTime = time;
+    setCurrentTime(time);
+  }, []);
+
+  const handleTimeUpdate = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || isSeeking) return;
+    setCurrentTime(video.currentTime);
+  }, [isSeeking]);
+
+  const handleLoadedMetadata = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    setDuration(video.duration);
+  }, []);
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div
+      className="w-full h-full relative group"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full h-full object-cover"
+        muted
+        loop
+        preload="metadata"
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onClick={togglePlay}
+        style={{ pointerEvents: isSelected ? "auto" : "none" }}
+      />
+
+      {/* Big center play button when paused and not hovered */}
+      {!isPlaying && !showControls && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+          <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
+            <Play className="h-7 w-7 text-white fill-white ml-1" />
+          </div>
+        </div>
+      )}
+
+      {/* Controls overlay - show on hover */}
+      {showControls && isSelected && (
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pt-6 pb-2 transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {/* Seek bar */}
+          <div className="relative w-full h-4 flex items-center mb-1.5 group/seek">
+            {/* Track background */}
+            <div className="absolute left-0 right-0 h-1 rounded-full bg-white/30 group-hover/seek:h-1.5 transition-all" />
+            {/* Progress fill */}
+            <div
+              className="absolute left-0 h-1 rounded-full bg-blue-500 group-hover/seek:h-1.5 transition-all pointer-events-none"
+              style={{ width: `${progress}%` }}
+            />
+            {/* Seek input */}
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              onMouseDown={(e) => { e.stopPropagation(); setIsSeeking(true); }}
+              onMouseUp={(e) => { e.stopPropagation(); setIsSeeking(false); }}
+              className="absolute w-full h-4 opacity-0 cursor-pointer"
+              style={{ zIndex: 10 }}
+            />
+            {/* Thumb indicator */}
+            <div
+              className="absolute w-3 h-3 rounded-full bg-blue-500 shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+              style={{ left: `calc(${progress}% - 6px)` }}
+            />
+          </div>
+
+          {/* Play/pause + time */}
+          <div className="flex items-center gap-2">
+            <button
+              className="text-white hover:text-blue-400 transition-colors p-0.5"
+              onClick={togglePlay}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {isPlaying ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              ) : (
+                <Play className="h-4 w-4 text-white fill-white" />
+              )}
+            </button>
+            <span className="text-white text-[10px] font-mono tabular-nums select-none">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SlideEditorPage() {
   const params = useParams();
   const router = useRouter();
@@ -643,11 +786,12 @@ export default function SlideEditorPage() {
       ]);
       const assetsData = await assetsRes.json();
       const foldersData = await foldersRes.json();
-      // Filter only image assets
-      const images = (assetsData.assets || []).filter((a: any) =>
-        a.type?.startsWith("image") || a.file_url?.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i)
+      // Filter image and video assets
+      const mediaAssets = (assetsData.assets || []).filter((a: any) =>
+        a.type?.startsWith("image") || a.type?.startsWith("video") ||
+        a.file_url?.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|mov|avi)$/i)
       );
-      setContentAssets(images);
+      setContentAssets(mediaAssets);
       // Filter folders by parent
       const allFolders = foldersData.folders || [];
       const childFolders = allFolders.filter((f: any) =>
@@ -764,7 +908,10 @@ export default function SlideEditorPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedElement && !e.target?.toString().includes("Input") && !(e.target as HTMLElement).isContentEditable) {
+        const target = e.target as HTMLElement;
+        const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        const isTextInput = isInput && ["text", "password", "number", "email", "url", "search", "tel"].includes((target as HTMLInputElement).type);
+        if (selectedElement && !isTextInput && !target.isContentEditable) {
           e.preventDefault();
           deleteElement();
         }
@@ -1998,12 +2145,9 @@ export default function SlideEditorPage() {
                     </div>
                   )}
                   {element.type === "video" && element.src && (
-                    <video
+                    <VideoPlayer
                       src={element.src}
-                      className="w-full h-full object-cover pointer-events-none"
-                      autoPlay
-                      muted
-                      loop
+                      isSelected={selectedElement === element.id}
                     />
                   )}
                   {element.type === "shape" && <div className="w-full h-full" style={{ backgroundColor: element.style.backgroundColor }} />}
@@ -2732,7 +2876,7 @@ export default function SlideEditorPage() {
           <DialogContent className={`max-w-4xl max-h-[80vh] ${darkMode ? 'bg-gray-900 border-gray-700' : ''}`}>
             <DialogHeader>
               <DialogTitle className={darkMode ? 'text-white' : ''}>Content Library</DialogTitle>
-              <DialogDescription className={darkMode ? 'text-gray-400' : ''}>Select an image from your uploaded content</DialogDescription>
+              <DialogDescription className={darkMode ? 'text-gray-400' : ''}>Select an image or video from your uploaded content</DialogDescription>
             </DialogHeader>
 
             {/* Breadcrumb navigation */}
@@ -2794,32 +2938,71 @@ export default function SlideEditorPage() {
                     </div>
                   ))}
 
-                  {/* Images */}
-                  {contentAssets.map((asset: any) => (
-                    <div
-                      key={asset.id}
-                      className="aspect-video cursor-pointer hover:ring-2 hover:ring-blue-500 rounded overflow-hidden relative group"
-                      onClick={() => {
-                        if (replaceTargetId && asset.file_url) {
-                          replaceImage(replaceTargetId, asset.file_url);
-                        } else if (asset.file_url) {
-                          addImage(asset.file_url);
-                        }
-                        setIsContentPickerOpen(false);
-                      }}
-                    >
-                      <img
-                        src={asset.file_url}
-                        alt={asset.name || 'Content image'}
-                        className="w-full h-full object-cover"
-                      />
-                      {asset.name && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity truncate">
-                          {asset.name}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {/* Images & Videos */}
+                  {contentAssets.map((asset: any) => {
+                    const isVideo = asset.type === 'video' || asset.mime_type?.startsWith('video/') || asset.file_url?.match(/\.(mp4|webm|mov|avi)$/i);
+                    return (
+                      <div
+                        key={asset.id}
+                        className="aspect-video cursor-pointer hover:ring-2 hover:ring-blue-500 rounded overflow-hidden relative group"
+                        onClick={() => {
+                          if (replaceTargetId && asset.file_url) {
+                            replaceImage(replaceTargetId, asset.file_url);
+                          } else if (asset.file_url) {
+                            if (isVideo) {
+                              // Add as a video element
+                              const newElement: SlideElement = {
+                                id: Math.random().toString(36).substr(2, 9),
+                                type: "video",
+                                x: 100,
+                                y: 100,
+                                width: 400,
+                                height: 225,
+                                src: asset.file_url,
+                                style: {},
+                              };
+                              const newSlides = [...slides];
+                              newSlides[currentSlideIndex].elements.push(newElement);
+                              setSlides(newSlides);
+                              saveToHistory(newSlides, currentSlideIndex);
+                              setSelectedElement(newElement.id);
+                            } else {
+                              addImage(asset.file_url);
+                            }
+                          }
+                          setIsContentPickerOpen(false);
+                        }}
+                      >
+                        {isVideo ? (
+                          <>
+                            <video
+                              src={asset.file_url}
+                              className="w-full h-full object-cover"
+                              muted
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                              <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+                                <Play className="h-5 w-5 text-white fill-white ml-0.5" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <img
+                            src={asset.file_url}
+                            alt={asset.name || 'Content image'}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        {asset.name && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity truncate">
+                            {isVideo && <Video className="inline h-3 w-3 mr-1" />}
+                            {asset.name}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>
