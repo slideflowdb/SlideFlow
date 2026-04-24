@@ -1448,7 +1448,7 @@ export default function SlideEditorPage() {
               {darkMode ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4" />}
             </Button>
             <Button
-              onClick={saveSlide}
+              onClick={() => saveSlide()}
               disabled={isSaving}
               className={darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
             >

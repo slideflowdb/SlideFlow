@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+// Allow longer processing time for large file uploads
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -37,7 +40,10 @@ export async function POST(request: NextRequest) {
     const filePath = `uploads/${Date.now()}-${fileName}`;
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    
+
+    console.log(`[Upload] File: ${fileName}, Size: ${buffer.length} bytes (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);
+
+    // Upload via server-side supabase client (proven to work up to 50MB server-side)
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("content")
       .upload(filePath, buffer, {
@@ -48,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (uploadError) {
       console.error("Upload error:", uploadError);
       return NextResponse.json(
-        { error: "Failed to upload file" },
+        { error: `Failed to upload file: ${uploadError.message}` },
         { status: 500 }
       );
     }

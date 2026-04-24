@@ -70,49 +70,74 @@ export function useContent() {
     setIsLoading(true);
     setError(null);
     try {
-      // Upload directly from client to Supabase Storage (bypasses Next.js body size limit)
-      const { createClient } = await import("@supabase/supabase-js");
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const FIVE_MB = 5 * 1024 * 1024;
 
-      const filePath = `uploads/${Date.now()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("content")
-        .upload(filePath, file, {
-          contentType: file.type,
-          upsert: false,
+      if (file.size > FIVE_MB) {
+        // For larger files, upload through the Next.js API route
+        // which sends to Supabase server-side (bypasses client infrastructure limits)
+        const formData = new FormData();
+        formData.append("file", file);
+        if (folderId) formData.append("folderId", folderId);
+
+        const response = await fetch("/api/content/upload", {
+          method: "POST",
+          body: formData,
         });
 
-      if (uploadError) {
-        throw new Error(uploadError.message || "Failed to upload file to storage");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to upload file");
+        }
+
+        const data = await response.json();
+        await fetchAssets(currentFolderId);
+        return data.asset;
+      } else {
+        // For small files, upload directly to Supabase from client (faster)
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+        const filePath = `uploads/${Date.now()}-${file.name}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("content")
+          .upload(filePath, file, {
+            contentType: file.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(uploadError.message || "Failed to upload file to storage");
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("content")
+          .getPublicUrl(filePath);
+
+        // Save metadata via API route
+        const response = await fetch("/api/content/upload/metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            mimeType: file.type,
+            fileSize: file.size,
+            fileUrl: publicUrlData.publicUrl,
+            folderId: folderId || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to save file metadata");
+        }
+
+        const data = await response.json();
+        await fetchAssets(currentFolderId);
+        return data.asset;
       }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("content")
-        .getPublicUrl(filePath);
-
-      // Save metadata via API route (small JSON payload, no size issue)
-      const response = await fetch("/api/content/upload/metadata", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type,
-          fileSize: file.size,
-          fileUrl: publicUrlData.publicUrl,
-          folderId: folderId || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save file metadata");
-      }
-
-      const data = await response.json();
-      await fetchAssets(currentFolderId);
-      return data.asset;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       throw err;
