@@ -182,6 +182,11 @@ export default function SlideEditorPage() {
   const [scheduleStart, setScheduleStart] = useState("");
   const [scheduleFinish, setScheduleFinish] = useState("");
   const [scheduleError, setScheduleError] = useState("");
+  const [conflictWarning, setConflictWarning] = useState<{
+    showName: string;
+    conflictingId: number | "manual";
+    actionToTake: "delete_schedule" | "stop_manual";
+  } | null>(null);
   const [zoom, setZoom] = useState(100);
   const [autoFitZoom, setAutoFitZoom] = useState(true);
   const [slides, setSlides] = useState<Slide[]>([
@@ -541,6 +546,18 @@ export default function SlideEditorPage() {
       style.borderRadius = "50%";
     } else if (shapeType === "triangle") {
       style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
+    } else if (shapeType === "diamond") {
+      style.clipPath = "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)";
+      style.backgroundColor = "#10B981";
+    } else if (shapeType === "star") {
+      style.clipPath = "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
+      style.backgroundColor = "#FBBF24";
+    } else if (shapeType === "hexagon") {
+      style.clipPath = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+      style.backgroundColor = "#8B5CF6";
+    } else if (shapeType === "pentagon") {
+      style.clipPath = "polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)";
+      style.backgroundColor = "#EC4899";
     }
 
     const newElement: SlideElement = {
@@ -976,7 +993,7 @@ export default function SlideEditorPage() {
     return data.url;
   };
 
-  const saveSlide = async () => {
+  const saveSlide = async (overrideScheduleName: string | null | undefined = undefined) => {
     setIsSaving(true);
     setSaveMessage(null);
     try {
@@ -1013,14 +1030,20 @@ export default function SlideEditorPage() {
       // Update local state with the storage URLs so future saves are fast
       setSlides(slidesToSave);
 
-      const payload = JSON.stringify({
+      const payloadObj: any = {
         id: savedShowId,
         contentId: params.slideId === "new" ? undefined : params.slideId,
         name: slideName,
         slidesData: slidesToSave,
         startTime: scheduleStart ? new Date(scheduleStart).toISOString() : null,
         finishTime: scheduleFinish ? new Date(scheduleFinish).toISOString() : null,
-      });
+      };
+
+      if (overrideScheduleName !== undefined) {
+        payloadObj.scheduleName = overrideScheduleName;
+      }
+
+      const payload = JSON.stringify(payloadObj);
 
       console.log(`[Save] Payload size: ${(payload.length / 1024 / 1024).toFixed(2)} MB`);
 
@@ -1082,6 +1105,66 @@ export default function SlideEditorPage() {
       return;
     }
 
+    try {
+      const activeRes = await fetch("/api/shows/active");
+      const activeData = await activeRes.json();
+      const manualPresent = activeData.manualPresent;
+
+      const scheduledRes = await fetch("/api/shows?scheduled=true");
+      const scheduledData = await scheduledRes.json();
+      
+      const now = new Date();
+      if (manualPresent && startDate <= now) {
+        setConflictWarning({
+           showName: manualPresent.show_name || "Manual Present",
+           conflictingId: "manual",
+           actionToTake: "stop_manual"
+        });
+        return;
+      }
+
+      const scheduledShows: any[] = scheduledData.shows || [];
+      const overlapping = scheduledShows.find((s) => {
+        if (savedShowId && s.id === savedShowId) return false;
+        if (!s.start_time || !s.finish_time) return false;
+
+        const existingStart = new Date(s.start_time);
+        const existingFinish = new Date(s.finish_time);
+
+        return startDate < existingFinish && finishDate > existingStart;
+      });
+
+      if (overlapping) {
+        setConflictWarning({
+           showName: overlapping.schedule_name || overlapping.name,
+           conflictingId: overlapping.id,
+           actionToTake: "delete_schedule"
+        });
+        return;
+      }
+
+    } catch (e) {
+      console.error(e);
+    }
+
+    setIsScheduleOpen(false);
+    await saveSlide(null);
+  };
+
+  const handleResolveConflict = async () => {
+    if (!conflictWarning) return;
+    
+    if (conflictWarning.actionToTake === "stop_manual") {
+      await fetch("/api/shows/present", { method: "DELETE" });
+    } else if (conflictWarning.actionToTake === "delete_schedule" && typeof conflictWarning.conflictingId === "number") {
+      await fetch("/api/shows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: conflictWarning.conflictingId, startTime: null, finishTime: null }),
+      });
+    }
+    
+    setConflictWarning(null);
     setIsScheduleOpen(false);
     await saveSlide();
   };
@@ -1167,6 +1250,27 @@ export default function SlideEditorPage() {
                 router.push('/dashboard');
               }}>
                 Save & Exit
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        
+        <Dialog open={!!conflictWarning} onOpenChange={(open) => { if (!open) setConflictWarning(null); }}>
+          <DialogContent className={darkMode ? 'bg-gray-900 border-gray-700 text-white' : ''}>
+            <DialogHeader>
+              <DialogTitle>Scheduling Conflict</DialogTitle>
+              <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
+                {conflictWarning?.actionToTake === "stop_manual" 
+                  ? `There is a manually started presentation ("${conflictWarning.showName}") currently running.`
+                  : `This time slot overlaps with an existing scheduled presentation: "${conflictWarning?.showName}".`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setConflictWarning(null)} className={darkMode ? 'border-gray-600 text-white hover:bg-gray-800' : ''}>
+                Edit Time
+              </Button>
+              <Button variant="destructive" onClick={handleResolveConflict}>
+                {conflictWarning?.actionToTake === "stop_manual" ? "Stop Current Presentation" : "Cancel Existing Schedule"}
               </Button>
             </div>
           </DialogContent>
@@ -1265,23 +1369,6 @@ export default function SlideEditorPage() {
               >
                 <span className={`text-xs font-bold ${darkMode ? 'text-white' : ''}`}>+</span>
               </Button>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setAutoFitZoom(true)}
-                      className={`${darkMode ? 'editor-button hover:bg-[#3a4156]' : ''} ${autoFitZoom ? 'text-blue-500 bg-blue-50/10' : 'text-gray-400'}`}
-                    >
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Fit to screen</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </div>
             <Button
               variant="outline"
@@ -1511,6 +1598,58 @@ export default function SlideEditorPage() {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Triangle</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-9 w-9 ${darkMode ? 'text-white hover:bg-gray-700' : ''}`}
+                              onClick={() => { addShape("diamond"); setShowShapesMenu(false); }}
+                            >
+                              <Diamond className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Diamond</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-9 w-9 ${darkMode ? 'text-white hover:bg-gray-700' : ''}`}
+                              onClick={() => { addShape("star"); setShowShapesMenu(false); }}
+                            >
+                              <Star className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Star</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-9 w-9 ${darkMode ? 'text-white hover:bg-gray-700' : ''}`}
+                              onClick={() => { addShape("hexagon"); setShowShapesMenu(false); }}
+                            >
+                              <Hexagon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Hexagon</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-9 w-9 ${darkMode ? 'text-white hover:bg-gray-700' : ''}`}
+                              onClick={() => { addShape("pentagon"); setShowShapesMenu(false); }}
+                            >
+                              <Pentagon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Pentagon</TooltipContent>
                         </Tooltip>
                       </div>
                     )}

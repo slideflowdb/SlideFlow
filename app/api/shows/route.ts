@@ -121,7 +121,10 @@ export async function POST(request: NextRequest) {
                 updateData.slides_data = slidesData;
             }
             
-            if (startTime !== undefined) updateData.start_time = startTime;
+            if (startTime !== undefined) {
+                updateData.start_time = startTime;
+                if (startTime === null) updateData.schedule_name = null;
+            }
             if (finishTime !== undefined) updateData.finish_time = finishTime;
             if (deviceId !== undefined) updateData.device_id = deviceId;
             if (locationId !== undefined) updateData.location_id = locationId;

@@ -76,7 +76,7 @@ export default function ScreensPage() {
   const [presentSearch, setPresentSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc" | "manual">("desc");
   const [selectedPresentIds, setSelectedPresentIds] = useState<Set<number>>(new Set());
 
   // Drag and drop state
@@ -106,6 +106,27 @@ export default function ScreensPage() {
       const response = await fetch("/api/shows");
       const data = await response.json();
       if (data.shows) {
+        const savedOrder = localStorage.getItem("slideflow_shows_order");
+        if (savedOrder) {
+          try {
+            const orderIds = JSON.parse(savedOrder);
+            if (Array.isArray(orderIds) && orderIds.length > 0) {
+              const orderedShows = [...data.shows].sort((a, b) => {
+                const idxA = orderIds.indexOf(a.id);
+                const idxB = orderIds.indexOf(b.id);
+                if (idxA === -1 && idxB === -1) return 0;
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+              });
+              setShows(orderedShows);
+              setSortOrder("manual");
+              return;
+            }
+          } catch (e) {
+            console.error("Failed to parse saved order:", e);
+          }
+        }
         setShows(data.shows);
       }
     } catch (error) {
@@ -370,17 +391,22 @@ export default function ScreensPage() {
               size="sm"
               onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
               className={`gap-2 ${darkMode ? 'dashboard-button' : ''}`}
-              title={sortOrder === "desc" ? "Sorted: Newest first (click for oldest first)" : "Sorted: Oldest first (click for newest first)"}
+              title={sortOrder === "desc" ? "Sorted: Newest first (click for oldest first)" : sortOrder === "asc" ? "Sorted: Oldest first (click for newest first)" : "Sorted: Manual (click for newest first)"}
             >
               {sortOrder === "desc" ? (
                 <>
                   <ArrowDownAZ className="h-4 w-4" />
                   <span className="hidden sm:inline">Newest First</span>
                 </>
-              ) : (
+              ) : sortOrder === "asc" ? (
                 <>
                   <ArrowUpAZ className="h-4 w-4" />
                   <span className="hidden sm:inline">Oldest First</span>
+                </>
+              ) : (
+                <>
+                  <GripVertical className="h-4 w-4" />
+                  <span className="hidden sm:inline">Custom Order</span>
                 </>
               )}
             </Button>
@@ -569,11 +595,11 @@ export default function ScreensPage() {
 
         {!isLoading && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[...shows].sort((a, b) => {
+            {(sortOrder === "manual" ? shows : [...shows].sort((a, b) => {
               const dateA = new Date(a.updated_at || a.created_at).getTime();
               const dateB = new Date(b.updated_at || b.created_at).getTime();
               return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
-            }).map((show, index) => {
+            })).map((show, index) => {
               const previewSlide = getPreviewSlide(show);
               const slideCount = getShowSlideCount(show);
               const totalDuration = getShowTotalDuration(show);
@@ -583,6 +609,14 @@ export default function ScreensPage() {
                   key={show.id} 
                   draggable={isDraggableId === show.id}
                   onDragStart={(e) => {
+                    if (sortOrder !== "manual") {
+                      setShows([...shows].sort((a, b) => {
+                        const dateA = new Date(a.updated_at || a.created_at).getTime();
+                        const dateB = new Date(b.updated_at || b.created_at).getTime();
+                        return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+                      }));
+                      setSortOrder("manual");
+                    }
                     setDraggedShowId(show.id);
                     e.dataTransfer.effectAllowed = "move";
                   }}
@@ -609,6 +643,7 @@ export default function ScreensPage() {
                     setDraggedShowId(null);
                     setDragOverShowId(null);
                     setIsDraggableId(null);
+                    localStorage.setItem("slideflow_shows_order", JSON.stringify(shows.map(s => s.id)));
                   }}
                   className={`group overflow-hidden transition-all duration-300 ${darkMode ? 'bg-gray-900/80 border-gray-700' : ''} ${draggedShowId === show.id ? 'opacity-50 scale-105 z-10' : ''}`}
                 >
