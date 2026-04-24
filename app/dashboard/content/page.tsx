@@ -25,6 +25,7 @@ export default function ContentPage() {
   const [draggedAsset, setDraggedAsset] = useState<ReturnType<typeof useContent>['assets'][0] | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [renameFolderDialog, setRenameFolderDialog] = useState<{ open: boolean; folderId: string | null; name: string }>({ open: false, folderId: null, name: "" });
 
   const {
     assets,
@@ -39,6 +40,7 @@ export default function ContentPage() {
     moveAsset,
     deleteAsset,
     deleteFolder,
+    renameFolder,
     navigateToFolder,
   } = useContent();
 
@@ -125,6 +127,26 @@ export default function ContentPage() {
     }
   };
 
+  const handleRenameFolder = async () => {
+    if (!renameFolderDialog.folderId || !renameFolderDialog.name.trim()) return;
+    try {
+      await renameFolder(renameFolderDialog.folderId, renameFolderDialog.name.trim());
+      setRenameFolderDialog({ open: false, folderId: null, name: "" });
+    } catch (err) {
+      console.error("Error renaming folder:", err);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    if (!confirm("Are you sure you want to delete this folder? It must be empty.")) return;
+    try {
+      await deleteFolder(folderId);
+    } catch (err) {
+      console.error("Error deleting folder:", err);
+      // Let the error show up in the error UI or alert
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, asset: any) => {
     setDraggedAsset(asset);
     e.dataTransfer.effectAllowed = "move";
@@ -195,7 +217,7 @@ export default function ContentPage() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx"
+            accept="image/*,video/*,.mp4,.mov,.webm,.avi,.pdf,.ppt,.pptx,.doc,.docx"
             onChange={handleFileUpload}
             className="hidden"
           />
@@ -274,7 +296,7 @@ export default function ContentPage() {
               <Card
                 key={folder.id}
                 className={cn(
-                  "cursor-pointer hover:bg-accent transition-colors",
+                  "cursor-pointer hover:bg-accent transition-colors h-full",
                   dragOverFolder === folder.id && "ring-2 ring-primary bg-accent",
                   viewMode === "list" && "flex items-center"
                 )}
@@ -284,14 +306,32 @@ export default function ContentPage() {
                 onDrop={(e) => handleDrop(e, folder.id)}
               >
                 <CardContent className={cn(
-                  "flex items-center",
-                  viewMode === "grid" ? "p-4 flex-col text-center" : "p-3 flex-row gap-3"
+                  "flex relative",
+                  viewMode === "grid" ? "p-4 flex-col items-center justify-center text-center h-full min-h-[120px]" : "p-3 flex-row items-center gap-3"
                 )}>
                   <Folder className={cn(
-                    "text-yellow-500",
+                    "text-yellow-500 shrink-0",
                     viewMode === "grid" ? "h-10 w-10 mb-2" : "h-6 w-6"
                   )} />
-                  <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+                  <span className={cn("text-sm font-medium truncate", viewMode === "list" ? "flex-1" : "w-full px-2")}>{folder.name}</span>
+                  
+                  <div className={cn("absolute", viewMode === "grid" ? "bottom-2 right-2" : "right-3")} onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setRenameFolderDialog({ open: true, folderId: folder.id, name: folder.name })}>
+                          <Edit className="mr-2 h-4 w-4" /> Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteFolder(folder.id)}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -299,10 +339,10 @@ export default function ContentPage() {
 
             <Dialog open={newFolderDialog} onOpenChange={setNewFolderDialog}>
               <DialogTrigger asChild>
-                <Card className="border-dashed cursor-pointer hover:bg-accent">
+                <Card className="border-dashed cursor-pointer hover:bg-accent h-full">
                   <CardContent className={cn(
-                    "flex items-center justify-center",
-                    viewMode === "grid" ? "p-4 flex-col text-center" : "p-3 flex-row gap-3"
+                    "flex items-center justify-center h-full",
+                    viewMode === "grid" ? "p-4 flex-col text-center min-h-[120px]" : "p-3 flex-row gap-3"
                   )}>
                     <div className={cn(
                       "rounded-full bg-primary/10 flex items-center justify-center",
@@ -333,6 +373,31 @@ export default function ContentPage() {
                   </Button>
                   <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
                     Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={renameFolderDialog.open} onOpenChange={(open) => setRenameFolderDialog({ open, folderId: null, name: "" })}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Rename Folder</DialogTitle>
+                  <DialogDescription>
+                    Enter a new name for your folder
+                  </DialogDescription>
+                </DialogHeader>
+                <Input
+                  placeholder="Folder name"
+                  value={renameFolderDialog.name}
+                  onChange={(e) => setRenameFolderDialog(prev => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && handleRenameFolder()}
+                />
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRenameFolderDialog({ open: false, folderId: null, name: "" })}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleRenameFolder} disabled={!renameFolderDialog.name.trim()}>
+                    Rename
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -388,22 +453,14 @@ export default function ContentPage() {
                           </div>
                         )}
                         {asset.type === "video" && asset.duration && (
-                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                          <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                             {Math.floor(asset.duration / 60)}:{String(asset.duration % 60).padStart(2, "0")}
                           </div>
                         )}
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{asset.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatFileSize(asset.file_size)} • {getFileTypeLabel(asset.mime_type)}
-                            </p>
-                          </div>
+                        <div className="absolute bottom-2 right-2" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 bg-black/30 hover:bg-black/50 text-white">
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -429,6 +486,14 @@ export default function ContentPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                        </div>
+                      </div>
+                      <CardContent className="p-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{asset.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(asset.file_size)} • {getFileTypeLabel(asset.mime_type)}
+                          </p>
                         </div>
                         <div className="flex gap-2 mt-3">
                           <Button

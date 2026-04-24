@@ -35,6 +35,14 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStopping, setIsStopping] = useState(false);
   const [isStoppingShow, setIsStoppingShow] = useState(false);
+  const [staleIndex, setStaleIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStaleIndex((prev) => prev + 1);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -133,14 +141,11 @@ export default function DashboardPage() {
     0
   );
 
-  const totalDuration = shows.reduce(
-    (acc, s) =>
-      acc +
-      (Array.isArray(s.slides_data)
-        ? s.slides_data.reduce((a: number, slide: any) => a + (slide.duration || 10), 0)
-        : 0),
-    0
-  );
+  const staleShows = [...shows]
+    .sort((a, b) => new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime())
+    .slice(0, 3);
+  const currentStaleShow = staleShows.length > 0 ? staleShows[staleIndex % staleShows.length] : null;
+  const staleDaysOld = currentStaleShow ? Math.floor((new Date().getTime() - new Date(currentStaleShow.updated_at || currentStaleShow.created_at).getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
   const scheduledShows = shows.filter((s) => s.start_time).length;
 
@@ -204,16 +209,30 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Duration</CardTitle>
+            <CardTitle className="text-sm font-medium">Stale Presentations</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoading ? "—" : formatDuration(totalDuration)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Across all presentations
-            </p>
+            {isLoading ? (
+              <div className="text-2xl font-bold">—</div>
+            ) : currentStaleShow ? (
+              <div 
+                key={currentStaleShow.id} 
+                className="flex flex-col h-[48px] justify-center animate-in fade-in slide-in-from-bottom-2 duration-500"
+              >
+                <div className="text-lg font-bold leading-tight truncate" title={currentStaleShow.name || "Untitled"}>
+                  {currentStaleShow.name || "Untitled"}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Unused for {staleDaysOld} day{staleDaysOld === 1 ? '' : 's'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col h-[48px] justify-center">
+                <div className="text-lg font-bold">0</div>
+                <p className="text-xs text-muted-foreground">All presentations are active</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -240,7 +259,7 @@ export default function DashboardPage() {
               <MonitorPlay className="h-5 w-5" />
               Active Display
             </CardTitle>
-            <CardDescription>Currently playing and upcoming shows</CardDescription>
+            <CardDescription>Currently playing and upcoming presentations</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

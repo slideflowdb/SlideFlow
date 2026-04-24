@@ -70,20 +70,44 @@ export function useContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      if (folderId) {
-        formData.append("folderId", folderId);
+      // Upload directly from client to Supabase Storage (bypasses Next.js body size limit)
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      const filePath = `uploads/${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("content")
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message || "Failed to upload file to storage");
       }
 
-      const response = await fetch("/api/content/upload", {
+      const { data: publicUrlData } = supabase.storage
+        .from("content")
+        .getPublicUrl(filePath);
+
+      // Save metadata via API route (small JSON payload, no size issue)
+      const response = await fetch("/api/content/upload/metadata", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          fileUrl: publicUrlData.publicUrl,
+          folderId: folderId || null,
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to upload file");
+        throw new Error(errorData.error || "Failed to save file metadata");
       }
 
       const data = await response.json();
@@ -165,6 +189,25 @@ export function useContent() {
     }
   }, [fetchFolders]);
 
+  const renameFolder = useCallback(async (folderId: string, newName: string) => {
+    try {
+      const response = await fetch("/api/content/folders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: folderId, name: newName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to rename folder");
+      }
+      await fetchFolders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+      throw err;
+    }
+  }, [fetchFolders]);
+
   const navigateToFolder = useCallback((folderId: string | null) => {
     setCurrentFolderId(folderId);
     fetchAssets(folderId);
@@ -183,6 +226,7 @@ export function useContent() {
     moveAsset,
     deleteAsset,
     deleteFolder,
+    renameFolder,
     navigateToFolder,
     setCurrentFolderId,
   };

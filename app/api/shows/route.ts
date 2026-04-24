@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, contentId, name, slidesData, startTime, finishTime, deviceId, locationId, clientId, folderId } = body;
+        const { id, contentId, name, scheduleName, slidesData, startTime, finishTime, deviceId, locationId, clientId, folderId } = body;
 
         let validContentId = null;
         let generatedSlidesData = slidesData;
@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
         if (id) {
             const updateData: any = { updated_at: new Date().toISOString() };
             if (name !== undefined) updateData.name = name;
+            if (scheduleName !== undefined) updateData.schedule_name = scheduleName;
             
             // If we generated fallback slides data, override it. Otherwise update if provided.
             if (generatedSlidesData !== undefined) {
@@ -144,6 +145,7 @@ export async function POST(request: NextRequest) {
         } else {
             const insertData: any = {
                 name: name || "Untitled",
+                schedule_name: scheduleName || undefined,
                 slides_data: generatedSlidesData || [],
             };
 

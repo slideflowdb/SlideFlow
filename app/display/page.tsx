@@ -287,40 +287,7 @@ export default function DisplayPage() {
       )}
 
 
-      <>
 
-        <div
-          className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start bg-gradient-to-b from-black/50 to-transparent"
-          style={{
-            opacity: showControls ? 1 : 0,
-            transition: 'opacity 0.4s ease',
-            pointerEvents: showControls ? 'auto' : 'none',
-          }}
-        >
-          <div className="text-white/80 text-sm">
-            <div>Slide {currentSlideIndex + 1} of {slides.length}</div>
-            {activeShowName && (
-              <div className="text-white/60 text-xs mt-0.5">
-                📅 {activeShowName}
-              </div>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/20"
-            onClick={exitPresentation}
-          >
-            <X className="h-6 w-6" />
-          </Button>
-        </div>
-
-
-
-
-
-
-      </>
 
 
       {slides.length === 0 && (

@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check for duplicate name in both tables
+    const { count: countShow } = await supabase.from("show_folders").select("*", { count: "exact", head: true }).eq("name", name);
+    const { count: countContent } = await supabase.from("folders").select("*", { count: "exact", head: true }).eq("name", name);
+    if ((countShow && countShow > 0) || (countContent && countContent > 0)) {
+      return NextResponse.json({ error: "A folder with this name already exists in Storing or Content navigation." }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from("show_folders")
       .insert({
@@ -75,6 +82,13 @@ export async function PATCH(request: NextRequest) {
         { error: "Id and name are required" },
         { status: 400 }
       );
+    }
+
+    // Check for duplicate name in both tables
+    const { count: countShow } = await supabase.from("show_folders").select("*", { count: "exact", head: true }).eq("name", name).neq("id", id);
+    const { count: countContent } = await supabase.from("folders").select("*", { count: "exact", head: true }).eq("name", name);
+    if ((countShow && countShow > 0) || (countContent && countContent > 0)) {
+      return NextResponse.json({ error: "A folder with this name already exists in Storing or Content navigation." }, { status: 400 });
     }
 
     const { data, error } = await supabase

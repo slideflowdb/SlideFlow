@@ -397,21 +397,25 @@ export default function StoringPage() {
             <Card
               key={folder.id}
               className={cn(
-                "cursor-pointer transition-colors p-0 gap-0",
+                "cursor-pointer transition-colors p-0 gap-0 h-full relative",
                 darkMode ? 'bg-gray-800/50 border-gray-700 hover:bg-gray-700/50' : 'hover:bg-accent',
                 viewMode === "list" && "flex items-center"
               )}
               onClick={() => navigateToFolder(folder.id, folder.name)}
             >
               <CardContent className={cn(
-                "flex items-center",
-                viewMode === "grid" ? "p-4 flex-col text-center" : "p-3 flex-row gap-3 flex-1"
+                "flex relative h-full",
+                viewMode === "grid" ? "p-4 flex-col items-center justify-center text-center min-h-[120px]" : "p-3 flex-row items-center gap-3 flex-1"
               )}>
                 <Folder className={cn(
-                  "text-yellow-500",
+                  "text-yellow-500 shrink-0",
                   viewMode === "grid" ? "h-10 w-10 mb-2" : "h-6 w-6"
                 )} />
-                <span className={`text-sm font-medium truncate flex-1 ${darkMode ? 'text-white' : ''}`}>{folder.name}</span>
+                <span className={cn(
+                  "text-sm font-medium truncate",
+                  darkMode ? 'text-white' : '',
+                  viewMode === "list" ? "flex-1" : "w-full px-2"
+                )}>{folder.name}</span>
                 {viewMode === "list" && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -440,7 +444,7 @@ export default function StoringPage() {
                 )}
               </CardContent>
               {viewMode === "grid" && (
-                <div className={`px-4 pb-3 flex justify-end ${darkMode ? 'border-gray-700' : ''}`}>
+                <div className="absolute bottom-2 right-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -474,12 +478,12 @@ export default function StoringPage() {
           <Dialog open={newFolderDialog} onOpenChange={setNewFolderDialog}>
             <DialogTrigger asChild>
               <Card className={cn(
-                "border-dashed cursor-pointer transition-colors",
+                "border-dashed cursor-pointer transition-colors h-full relative",
                 darkMode ? 'border-gray-600 hover:bg-gray-800/50' : 'hover:bg-accent'
               )}>
                 <CardContent className={cn(
-                  "flex items-center justify-center",
-                  viewMode === "grid" ? "p-4 flex-col text-center" : "p-3 flex-row gap-3"
+                  "flex items-center justify-center h-full",
+                  viewMode === "grid" ? "p-4 flex-col text-center min-h-[120px]" : "p-3 flex-row gap-3"
                 )}>
                   <div className={cn(
                     "rounded-full bg-primary/10 flex items-center justify-center",

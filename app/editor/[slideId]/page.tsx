@@ -118,8 +118,6 @@ interface HistoryState {
 
 type ResizeHandle = "nw" | "ne" | "sw" | "se" | null;
 
-const PEXELS_API_KEY = "L6w1BIl04BhqryxVmqQUz4OuVe0Ve4dIYBkQqpfYT2Dv0IXDiTxaxMMD";
-
 const FONTS = [
   "Arial",
   "Helvetica",
@@ -212,10 +210,10 @@ export default function SlideEditorPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
 
-  const [isPexelsOpen, setIsPexelsOpen] = useState(false);
-  const [pexelsSearch, setPexelsSearch] = useState("");
-  const [pexelsImages, setPexelsImages] = useState<any[]>([]);
-  const [isPexelsLoading, setIsPexelsLoading] = useState(false);
+  const [isPixabayOpen, setIsPixabayOpen] = useState(false);
+  const [pixabaySearch, setPixabaySearch] = useState("");
+  const [pixabayImages, setPixabayImages] = useState<any[]>([]);
+  const [isPixabayLoading, setIsPixabayLoading] = useState(false);
 
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState("All");
@@ -647,24 +645,21 @@ export default function SlideEditorPage() {
     setIsContentLoading(false);
   };
 
-  const searchPexels = async (query: string = pexelsSearch) => {
+  const PIXABAY_API_KEY = "55571534-622b8df459864cd1d9c4844ee";
+
+  const searchPixabay = async (query: string = pixabaySearch) => {
     const searchTerm = query.trim() || "nature";
-    setIsPexelsLoading(true);
+    setIsPixabayLoading(true);
     try {
       const response = await fetch(
-        `https://api.pexels.com/v1/search?query=${encodeURIComponent(searchTerm)}&per_page=20`,
-        {
-          headers: {
-            Authorization: PEXELS_API_KEY,
-          },
-        }
+        `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(searchTerm)}&image_type=photo&per_page=30&safesearch=true`
       );
       const data = await response.json();
-      setPexelsImages(data.photos || []);
+      setPixabayImages(data.hits || []);
     } catch (error) {
-      console.error("Error searching Pexels:", error);
+      console.error("Error searching Pixabay:", error);
     }
-    setIsPexelsLoading(false);
+    setIsPixabayLoading(false);
   };
 
   const filteredEditorTemplates = SLIDE_TEMPLATES.filter((t) => {
@@ -1108,10 +1103,10 @@ export default function SlideEditorPage() {
   };
 
   useEffect(() => {
-    if (isPexelsOpen && pexelsImages.length === 0) {
-      searchPexels("business");
+    if (isPixabayOpen && pixabayImages.length === 0) {
+      searchPixabay("business");
     }
-  }, [isPexelsOpen]);
+  }, [isPixabayOpen]);
 
   const selectedElementData = currentSlide.elements.find((e) => e.id === selectedElement);
 
@@ -1450,11 +1445,11 @@ export default function SlideEditorPage() {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="outline" size="icon" onClick={() => { setIsPexelsOpen(true); setPexelsSearch(""); setPexelsImages([]); }} className={darkMode ? 'border-white hover:bg-gray-800' : ''}>
+                      <Button variant="outline" size="icon" onClick={() => { setIsPixabayOpen(true); setPixabaySearch(""); setPixabayImages([]); }} className={darkMode ? 'border-white hover:bg-gray-800' : ''}>
                         <ImageIcon className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Stock Images</TooltipContent>
+                    <TooltipContent>Stock Images (Pixabay)</TooltipContent>
                   </Tooltip>
                 </div>
 
@@ -1928,7 +1923,7 @@ export default function SlideEditorPage() {
                           }`}
                           onClick={() => {
                             setReplaceTargetId(imageContextMenu.elementId);
-                            setIsPexelsOpen(true);
+                            setIsPixabayOpen(true);
                             setImageContextMenu(null);
                             setShowReplaceSubmenu(false);
                           }}
@@ -2537,48 +2532,48 @@ export default function SlideEditorPage() {
         </div>
 
 
-        <Dialog open={isPexelsOpen} onOpenChange={(open) => { setIsPexelsOpen(open); if (!open) setReplaceTargetId(null); }}>
+        <Dialog open={isPixabayOpen} onOpenChange={(open) => { setIsPixabayOpen(open); if (!open) setReplaceTargetId(null); }}>
           <DialogContent className={`max-w-4xl max-h-[80vh] ${darkMode ? 'bg-gray-900 border-gray-700' : ''}`}>
             <DialogHeader>
               <DialogTitle className={darkMode ? 'text-white' : ''}>{replaceTargetId ? 'Replace Image' : 'Stock Images'}</DialogTitle>
-              <DialogDescription className={darkMode ? 'text-gray-400' : ''}>{replaceTargetId ? 'Choose a new image to replace the current one' : 'Search for free stock images from Pexels'}</DialogDescription>
+              <DialogDescription className={darkMode ? 'text-gray-400' : ''}>{replaceTargetId ? 'Choose a new image to replace the current one' : 'Search for free stock photos from Pixabay'}</DialogDescription>
             </DialogHeader>
             <div className="flex gap-2 mb-4">
               <Input
                 placeholder="Search images..."
-                value={pexelsSearch}
-                onChange={(e) => setPexelsSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && searchPexels()}
+                value={pixabaySearch}
+                onChange={(e) => setPixabaySearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchPixabay()}
                 className={darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''}
               />
-              <Button onClick={() => searchPexels()} disabled={isPexelsLoading}>
+              <Button onClick={() => searchPixabay()} disabled={isPixabayLoading}>
                 <Search className="h-4 w-4 mr-2" />
                 Search
               </Button>
             </div>
             <ScrollArea className="h-[400px]">
-              {isPexelsLoading ? (
+              {isPixabayLoading ? (
                 <div className="flex items-center justify-center h-32">
                   <p className={darkMode ? 'text-gray-400' : 'text-muted-foreground'}>Loading...</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {pexelsImages.map((photo) => (
+                  {pixabayImages.map((photo) => (
                     <div
                       key={photo.id}
                       className={`aspect-video cursor-pointer hover:ring-2 hover:ring-blue-500 rounded overflow-hidden`}
                       onClick={() => {
                         if (replaceTargetId) {
-                          replaceImage(replaceTargetId, photo.src.medium);
+                          replaceImage(replaceTargetId, photo.webformatURL);
                         } else {
-                          addImage(photo.src.medium);
+                          addImage(photo.webformatURL);
                         }
-                        setIsPexelsOpen(false);
+                        setIsPixabayOpen(false);
                       }}
                     >
                       <img
-                        src={photo.src.small}
-                        alt={photo.photographer}
+                        src={photo.previewURL}
+                        alt={photo.tags}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -2586,8 +2581,12 @@ export default function SlideEditorPage() {
                 </div>
               )}
             </ScrollArea>
+            <p className={`text-[10px] mt-2 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+              Images powered by <a href="https://pixabay.com" target="_blank" rel="noopener noreferrer" className="underline">Pixabay</a>. Free for commercial use.
+            </p>
           </DialogContent>
         </Dialog>
+
 
         {/* Content Library Picker Dialog */}
         <Dialog open={isContentPickerOpen} onOpenChange={(open) => { setIsContentPickerOpen(open); if (!open) { setReplaceTargetId(null); setCurrentContentFolderId(null); setContentFolderPath([{id: null, name: 'Root'}]); } }}>

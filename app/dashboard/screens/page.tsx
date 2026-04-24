@@ -21,7 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Play, Copy, Trash2, MoreVertical, Presentation, Clock, Video, Moon, Sun, Search, GripVertical, ArrowUpDown, ArrowDownAZ, ArrowUpAZ, Check, Calendar } from "lucide-react";
+import { Plus, Edit, Play, Copy, Trash2, MoreVertical, Presentation, Clock, Video, Moon, Sun, Search, GripVertical, ArrowUpDown, ArrowDownAZ, ArrowUpAZ, Check, Calendar, Type } from "lucide-react";
 
 interface Show {
   id: number;
@@ -84,6 +84,12 @@ export default function ScreensPage() {
   const [dragOverShowId, setDragOverShowId] = useState<number | null>(null);
   const [isDraggableId, setIsDraggableId] = useState<number | null>(null);
 
+  // Rename state
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [showToRename, setShowToRename] = useState<Show | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState("");
+
   useEffect(() => {
     const savedDarkMode = localStorage.getItem("slideflow_darkmode");
     if (savedDarkMode) {
@@ -138,6 +144,40 @@ export default function ScreensPage() {
 
   const handleEditSlide = (show: Show) => {
     router.push(`/editor/${show.id}`);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!showToRename || !renameValue.trim()) return;
+
+    if (showToRename.name === renameValue.trim()) {
+      setIsRenameDialogOpen(false);
+      return;
+    }
+
+    const duplicate = shows.find(
+      (s) => s.id !== showToRename.id && (s.name || "").toLowerCase().trim() === renameValue.toLowerCase().trim()
+    );
+    if (duplicate) {
+      setRenameError(`A presentation named "${duplicate.name}" already exists.`);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/shows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: showToRename.id,
+          name: renameValue.trim(),
+        }),
+      });
+      if (response.ok) {
+        fetchShows();
+        setIsRenameDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error renaming show:", error);
+    }
   };
 
   const handleDuplicateSlide = async (show: Show) => {
@@ -480,6 +520,42 @@ export default function ScreensPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            <Dialog open={isRenameDialogOpen} onOpenChange={(open) => { setIsRenameDialogOpen(open); if (!open) { setRenameError(""); } }}>
+              <DialogContent className={darkMode ? 'bg-gray-900 border-gray-700' : ''}>
+                <DialogHeader>
+                  <DialogTitle className={darkMode ? 'text-white' : ''}>Rename Presentation</DialogTitle>
+                  <DialogDescription className={darkMode ? 'text-gray-400' : ''}>
+                    Enter a new name for your presentation
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-2">
+                  <label className={`text-sm font-medium leading-none ${darkMode ? 'text-white' : ''}`}>
+                    Presentation Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Enter presentation name..."
+                    value={renameValue}
+                    onChange={(e) => { setRenameValue(e.target.value); setRenameError(""); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRenameSubmit();
+                    }}
+                    className={`${darkMode ? 'bg-gray-800 border-gray-700 text-white' : ''} ${renameError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {renameError && (
+                    <p className="text-sm text-red-500 mt-1">{renameError}</p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)} className={darkMode ? 'border-gray-600 text-white hover:bg-gray-800' : ''}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleRenameSubmit} disabled={!renameValue.trim() || !!renameError || (showToRename?.name === renameValue.trim())}>
+                    Rename
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -619,28 +695,6 @@ export default function ScreensPage() {
                           <Play className="mr-2 h-4 w-4" />
                           Present
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditSlide(show);
-                          }}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/dashboard/schedules?showId=${show.id}`);
-                          }}
-                        >
-                          <Calendar className="mr-2 h-4 w-4" />
-                          Schedule
-                        </Button>
                       </div>
 
 
@@ -682,6 +736,14 @@ export default function ScreensPage() {
                           <DropdownMenuItem onClick={() => handleEditSlide(show)} className={darkMode ? 'text-white focus:bg-gray-800' : ''}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setShowToRename(show); setRenameValue(show.name || ""); setRenameError(""); setIsRenameDialogOpen(true); }} className={darkMode ? 'text-white focus:bg-gray-800' : ''}>
+                            <Type className="mr-2 h-4 w-4" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/dashboard/schedules?showId=${show.id}`)} className={darkMode ? 'text-white focus:bg-gray-800' : ''}>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            Schedule
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDuplicateSlide(show)} className={darkMode ? 'text-white focus:bg-gray-800' : ''}>
                             <Copy className="mr-2 h-4 w-4" />
@@ -726,13 +788,13 @@ export default function ScreensPage() {
           <CardHeader>
             <CardTitle className={`text-lg ${darkMode ? 'text-white' : ''}`}>Presentation Info</CardTitle>
             <CardDescription className={darkMode ? 'text-gray-400' : ''}>
-              Details about your shows
+              Details about your presentations
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>Total Shows</p>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>Total Presentations</p>
                 <p className={`text-2xl font-bold ${darkMode ? 'text-white' : ''}`}>{shows.length}</p>
               </div>
               <div>

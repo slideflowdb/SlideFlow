@@ -32,6 +32,7 @@ interface Show {
   id: number;
   content_id: number | null;
   name: string;
+  schedule_name: string | null;
   slides_data: any[];
   start_time: string | null;
   finish_time: string | null;
@@ -105,6 +106,8 @@ export default function SchedulesPage() {
     actionToTake: "delete_schedule" | "stop_manual";
   } | null>(null);
 
+  const [missingPresentationDialog, setMissingPresentationDialog] = useState(false);
+
   const fetchShows = async () => {
     setLoading(true);
     try {
@@ -166,7 +169,7 @@ export default function SchedulesPage() {
   };
 
   const openEdit = (show: Show) => {
-    setFormName(show.name);
+    setFormName(show.schedule_name || show.name);
     setFormContentId(show.content_id?.toString() || "");
     setFormStart(show.start_time ? toLocalDatetimeString(show.start_time) : "");
     setFormFinish(show.finish_time ? toLocalDatetimeString(show.finish_time) : "");
@@ -177,7 +180,10 @@ export default function SchedulesPage() {
   const handleSave = async () => {
     setFormError("");
 
-    // No longer requiring content selection
+    if (!editingShowId && !formExistingShowId) {
+      setMissingPresentationDialog(true);
+      return;
+    }
 
     // Validate: start and finish times are required
     if (!formStart || !formFinish) {
@@ -250,7 +256,7 @@ export default function SchedulesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: parseInt(formExistingShowId, 10),
-            name: formName || undefined,
+            scheduleName: formName || undefined,
             startTime: isoStart,
             finishTime: isoFinish,
           }),
@@ -268,7 +274,7 @@ export default function SchedulesPage() {
     }
 
     const body: any = {
-      name: formName || "Untitled Schedule",
+      scheduleName: formName || "Untitled Schedule",
       startTime: isoStart,
       finishTime: isoFinish,
     };
@@ -524,7 +530,7 @@ export default function SchedulesPage() {
                         <CalendarClock className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg">{show.name}</CardTitle>
+                        <CardTitle className="text-lg">{show.schedule_name || show.name}</CardTitle>
                         {show.content && (
                           <CardDescription className="flex items-center gap-1 mt-0.5">
                             {getContentIcon(show.content.type)}
@@ -613,6 +619,22 @@ export default function SchedulesPage() {
             </Button>
             <Button variant="destructive" onClick={handleResolveConflict}>
               Stop Show & Schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={missingPresentationDialog} onOpenChange={setMissingPresentationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>No Presentation Selected</DialogTitle>
+            <DialogDescription>
+              Please select an existing presentation to schedule. You must choose one from the list before creating a schedule.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setMissingPresentationDialog(false)}>
+              Got it
             </Button>
           </DialogFooter>
         </DialogContent>

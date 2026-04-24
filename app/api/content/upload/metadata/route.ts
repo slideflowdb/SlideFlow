@@ -3,63 +3,39 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const folderId = formData.get("folderId") as string | null;
+    const body = await request.json();
+    const { fileName, mimeType, fileSize, fileUrl, folderId } = body;
 
-    if (!file) {
+    if (!fileName || !fileUrl) {
       return NextResponse.json(
-        { error: "File is required" },
+        { error: "fileName and fileUrl are required" },
         { status: 400 }
       );
     }
 
-    const mimeType = file.type;
-    const fileName = file.name;
     const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
 
     let type: string;
-    if (mimeType.startsWith("image/")) {
+    if (mimeType?.startsWith("image/")) {
       type = "image";
-    } else if (mimeType.startsWith("video/")) {
+    } else if (mimeType?.startsWith("video/")) {
       type = "video";
-    } else if (mimeType === "application/pdf" ||
+    } else if (
+      mimeType === "application/pdf" ||
       fileExtension === "pdf" ||
       fileExtension === "ppt" ||
       fileExtension === "pptx" ||
       fileExtension === "doc" ||
-      fileExtension === "docx") {
+      fileExtension === "docx"
+    ) {
       type = "document";
     } else {
       type = "other";
     }
 
-    const filePath = `uploads/${Date.now()}-${fileName}`;
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("content")
-      .upload(filePath, buffer, {
-        contentType: mimeType,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      return NextResponse.json(
-        { error: "Failed to upload file" },
-        { status: 500 }
-      );
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from("content")
-      .getPublicUrl(filePath);
-
     let thumbnailUrl: string | null = null;
     if (type === "image") {
-      thumbnailUrl = publicUrlData.publicUrl;
+      thumbnailUrl = fileUrl;
     }
 
     const { data: contentData, error: dbError } = await supabase
@@ -68,9 +44,9 @@ export async function POST(request: NextRequest) {
         folder_id: folderId || null,
         name: fileName,
         type: type,
-        mime_type: mimeType,
-        file_size: file.size,
-        file_url: publicUrlData.publicUrl,
+        mime_type: mimeType || null,
+        file_size: fileSize || null,
+        file_url: fileUrl,
         thumbnail_url: thumbnailUrl,
         status: "active",
       })
@@ -79,7 +55,6 @@ export async function POST(request: NextRequest) {
 
     if (dbError) {
       console.error("Database error:", dbError);
-      await supabase.storage.from("content").remove([filePath]);
       return NextResponse.json(
         { error: "Failed to save content metadata" },
         { status: 500 }
@@ -96,7 +71,10 @@ export async function POST(request: NextRequest) {
     const catId = categoryMap[type] || 5;
 
     let resolvedCatId = catId;
-    if (mimeType.startsWith("audio/") || ["mp3", "wav", "ogg", "flac", "aac"].includes(fileExtension)) {
+    if (
+      mimeType?.startsWith("audio/") ||
+      ["mp3", "wav", "ogg", "flac", "aac"].includes(fileExtension)
+    ) {
       resolvedCatId = 3;
     }
 
@@ -113,7 +91,7 @@ export async function POST(request: NextRequest) {
       asset: contentData,
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("Metadata save error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
