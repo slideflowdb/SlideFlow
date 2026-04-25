@@ -1,24 +1,33 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogHeader,
     DialogTitle,
+    DialogFooter,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, LayoutTemplate, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, LayoutTemplate, Plus, ChevronLeft, ChevronRight, Edit2, ExternalLink, MoreVertical, Pen, Trash2 } from "lucide-react";
 import { SLIDE_TEMPLATES, TEMPLATE_GENRES, SlideTemplate } from "@/lib/template-data";
 
-function SlidePreview({ template, size = "small" }: { template: SlideTemplate; size?: "small" | "large" }) {
-    const slide = template.slides[0];
+function SlidePreview({ template, size = "small" }: { template: any; size?: "small" | "large" }) {
+    const slide = template.slides?.[0] || template.slides_data?.[0];
+    if (!slide) return null;
     const scale = size === "small" ? 0.28 : 0.55;
     const width = 960 * scale;
     const height = 540 * scale;
@@ -81,6 +90,16 @@ function SlidePreview({ template, size = "small" }: { template: SlideTemplate; s
                             {el.content}
                         </span>
                     )}
+                    {el.type === "image" && el.src && (
+                        <div style={{ width: "100%", height: "100%", overflow: "hidden" }}>
+                            <img src={el.src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        </div>
+                    )}
+                    {el.type === "video" && (
+                        <div style={{ width: "100%", height: "100%", backgroundColor: "#1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <div style={{ width: Math.max(12, 24 * scale), height: Math.max(12, 24 * scale), backgroundColor: "#fff", clipPath: "polygon(0 0, 0 100%, 100% 50%)" }} />
+                        </div>
+                    )}
                 </div>
             ))}
         </div>
@@ -103,6 +122,209 @@ export default function TemplatesPage() {
     const [previewTemplate, setPreviewTemplate] = useState<SlideTemplate | null>(null);
     const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
     const [isImporting, setIsImporting] = useState(false);
+    const [myTemplates, setMyTemplates] = useState<any[]>([]);
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+    const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+    const [newTemplateName, setNewTemplateName] = useState("");
+    const [newTemplateDescription, setNewTemplateDescription] = useState("");
+    const [newTemplateGenre, setNewTemplateGenre] = useState("Corporate");
+    const [templateToRename, setTemplateToRename] = useState<any>(null);
+    const [nameError, setNameError] = useState("");
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [presentations, setPresentations] = useState<any[]>([]);
+    const [importSearchQuery, setImportSearchQuery] = useState("");
+    const [templateToImport, setTemplateToImport] = useState<any>(null);
+
+    useEffect(() => {
+        const fetchTemplates = async () => {
+            try {
+                const res = await fetch("/api/shows?isTemplate=true");
+                if (res.ok) {
+                    const data = await res.json();
+                    setMyTemplates(data.shows || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch custom templates", error);
+            } finally {
+                setIsLoadingTemplates(false);
+            }
+        };
+        fetchTemplates();
+    }, []);
+
+    const validateName = (name: string, ignoreId?: string) => {
+        if (!name.trim()) return "Name cannot be empty";
+        if (myTemplates.some(t => t.name.toLowerCase() === name.trim().toLowerCase() && t.id !== ignoreId)) {
+            return "A template with this name already exists";
+        }
+        return "";
+    };
+
+    const openCreateDialog = () => {
+        setNewTemplateName("New Template");
+        setNewTemplateDescription("");
+        setNewTemplateGenre("Corporate");
+        setNameError("");
+        setIsCreateDialogOpen(true);
+    };
+
+    const openRenameDialog = (template: any) => {
+        setTemplateToRename(template);
+        setNewTemplateName(template.name);
+        setNewTemplateDescription(template.description || "");
+        setNewTemplateGenre(template.genre || "Corporate");
+        setNameError("");
+        setIsRenameDialogOpen(true);
+    };
+
+    const handleCreateTemplate = async () => {
+        const error = validateName(newTemplateName);
+        if (error) {
+            setNameError(error);
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/shows", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: newTemplateName.trim(),
+                    description: newTemplateDescription.trim(),
+                    genre: newTemplateGenre,
+                    isTemplate: true,
+                    slidesData: [{
+                        id: Math.random().toString(36).substr(2, 9),
+                        name: "Slide 1",
+                        backgroundColor: "#ffffff",
+                        duration: 10,
+                        elements: []
+                    }]
+                }),
+            });
+
+            if (!response.ok) throw new Error("Failed to create template");
+            const data = await response.json();
+            if (data.show?.id) {
+                router.push(`/editor/${data.show.id}`);
+            }
+        } catch (error) {
+            console.error("Error creating template:", error);
+            setNameError("Failed to create template");
+        }
+    };
+
+    const handleRenameTemplate = async () => {
+        if (!templateToRename) return;
+        const error = validateName(newTemplateName, templateToRename.id);
+        if (error) {
+            setNameError(error);
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/shows", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: templateToRename.id,
+                    name: newTemplateName.trim(),
+                    description: newTemplateDescription.trim(),
+                    genre: newTemplateGenre,
+                }),
+            });
+
+            if (!response.ok) throw new Error("Failed to rename template");
+            setMyTemplates(prev => prev.map(t => t.id === templateToRename.id ? { ...t, name: newTemplateName.trim(), description: newTemplateDescription.trim(), genre: newTemplateGenre } : t));
+            setIsRenameDialogOpen(false);
+            setTemplateToRename(null);
+        } catch (error) {
+            console.error("Error renaming template:", error);
+            setNameError("Failed to rename template");
+        }
+    };
+
+    const handleDeleteTemplate = async (templateId: string) => {
+        if (!confirm("Are you sure you want to delete this template?")) return;
+        
+        try {
+            const response = await fetch(`/api/shows?id=${templateId}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok) throw new Error("Failed to delete template");
+            setMyTemplates(prev => prev.filter(t => t.id !== templateId));
+        } catch (error) {
+            console.error("Error deleting template:", error);
+            alert("Failed to delete template");
+        }
+    };
+
+    const handleImportCustomTemplate = async (template: any) => {
+        setTemplateToImport(template);
+        setImportSearchQuery("");
+        setIsImportModalOpen(true);
+        try {
+            const res = await fetch("/api/shows");
+            if (res.ok) {
+                const data = await res.json();
+                setPresentations(data.shows || []);
+            }
+        } catch (error) {
+            console.error("Failed to fetch presentations", error);
+        }
+    };
+
+    const executeImportTemplate = async (targetPresentationId: string) => {
+        if (!templateToImport) return;
+        setIsImporting(true);
+        try {
+            const targetPresentation = presentations.find(p => p.id === targetPresentationId);
+            if (!targetPresentation) throw new Error("Target presentation not found");
+
+            const clonedSlides = JSON.parse(JSON.stringify(templateToImport.slides_data || [])).map((slide: any, i: number) => ({
+                ...slide,
+                id: Math.random().toString(36).substr(2, 9),
+                duration: slide.duration || 10,
+                elements: slide.elements?.map((el: any) => ({
+                    ...el,
+                    id: Math.random().toString(36).substr(2, 9),
+                })) || [],
+            }));
+
+            const mergedSlides = [...(targetPresentation.slides_data || []), ...clonedSlides];
+
+            const response = await fetch("/api/shows", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: targetPresentationId,
+                    slidesData: mergedSlides,
+                }),
+            });
+
+            if (!response.ok) throw new Error("Failed to append template to presentation");
+            router.push(`/editor/${targetPresentationId}`);
+        } catch (error) {
+            console.error("Error importing template:", error);
+            setIsImporting(false);
+            alert("Failed to import template into the selected presentation.");
+        }
+    };
+
+    const filteredMyTemplates = useMemo(() => {
+        return myTemplates.filter((t) => {
+            if (selectedGenre !== "All" && t.genre !== selectedGenre) return false;
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+                t.name?.toLowerCase().includes(q) ||
+                t.description?.toLowerCase().includes(q) ||
+                t.genre?.toLowerCase().includes(q)
+            );
+        }).reverse();
+    }, [myTemplates, searchQuery, selectedGenre]);
 
     const filteredTemplates = useMemo(() => {
         return SLIDE_TEMPLATES.filter((t) => {
@@ -157,14 +379,20 @@ export default function TemplatesPage() {
     return (
         <div className="space-y-6">
             
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                    <LayoutTemplate className="h-8 w-8" />
-                    Templates
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                    Choose a template to get started quickly. Click any template to preview and import it into the editor.
-                </p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                        <LayoutTemplate className="h-8 w-8" />
+                        Templates
+                    </h1>
+                    <p className="text-muted-foreground mt-1">
+                        Choose a template to get started quickly. Click any template to preview and import it into the editor.
+                    </p>
+                </div>
+                <Button onClick={openCreateDialog} className="gap-2 shrink-0">
+                    <Plus className="h-4 w-4" />
+                    Create Template
+                </Button>
             </div>
 
             
@@ -195,6 +423,74 @@ export default function TemplatesPage() {
                 ))}
             </div>
 
+            {(!isLoadingTemplates && filteredMyTemplates.length > 0) && (
+                <div className="pt-4 pb-2 space-y-4">
+                    <h2 className="text-xl font-semibold tracking-tight text-primary">My Templates</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {filteredMyTemplates.map((template) => (
+                            <Card
+                                key={template.id}
+                                className="group relative cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all duration-200 overflow-hidden"
+                            >
+                                <CardContent className="p-3 relative">
+                                    <div className="absolute top-4 right-4 z-20">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 bg-background/50 backdrop-blur-sm hover:bg-background/80">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openRenameDialog(template); }}>
+                                                    <Pen className="h-4 w-4 mr-2" /> Edit Details
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(template.id); }}>
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                    <div className="flex justify-center mb-3 bg-muted/30 rounded-lg p-2 h-[140px] items-center text-muted-foreground overflow-hidden">
+                                        {template.slides_data?.[0] ? (
+                                            <SlidePreview template={template} size="small" />
+                                        ) : (
+                                            <LayoutTemplate className="h-10 w-10 opacity-50" />
+                                        )}
+                                    </div>
+                                    <div className="space-y-1.5 flex flex-col items-start">
+                                        <h3 className="font-semibold text-sm leading-tight group-hover:text-primary transition-colors">
+                                            {template.name}
+                                        </h3>
+                                        <p className="text-xs text-muted-foreground line-clamp-2 min-h-[32px]">
+                                            {template.description || "No description."}
+                                        </p>
+                                        <Badge variant="outline" className={`text-[10px] ${genreColors[template.genre || "Corporate"] || ""}`}>
+                                            {template.genre || "Corporate"}
+                                        </Badge>
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            {template.slides_data?.length || 0} slide{(template.slides_data?.length || 0) !== 1 ? "s" : ""} · {new Date(template.updated_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </CardContent>
+                                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-3">
+                                    <Button size="sm" onClick={() => router.push(`/editor/${template.id}`)} className="w-24">
+                                        <Edit2 className="h-4 w-4 mr-2" />
+                                        Edit
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => handleImportCustomTemplate(template)} className="w-24 bg-background">
+                                        <ExternalLink className="h-4 w-4 mr-2" />
+                                        Import
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            )}
+            
+            <div className="pt-4">
+                <h2 className="text-xl font-semibold tracking-tight mb-4">Premade Templates</h2>
+            </div>
             
             <p className="text-sm text-muted-foreground">
                 {filteredTemplates.length} template{filteredTemplates.length !== 1 ? "s" : ""} found
@@ -330,6 +626,151 @@ export default function TemplatesPage() {
                     )}
                 </DialogContent>
             </Dialog>
+
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Create New Template</DialogTitle>
+                        <DialogDescription>
+                            Configure details for your custom template.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Name</label>
+                            <Input
+                                value={newTemplateName}
+                                onChange={(e) => setNewTemplateName(e.target.value)}
+                                placeholder="Template name"
+                                className={nameError ? "border-red-500" : ""}
+                            />
+                            {nameError && <p className="text-sm text-red-500">{nameError}</p>}
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Description</label>
+                            <Input
+                                value={newTemplateDescription}
+                                onChange={(e) => setNewTemplateDescription(e.target.value)}
+                                placeholder="A brief description of this template"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Genre</label>
+                            <Select value={newTemplateGenre} onValueChange={setNewTemplateGenre}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select genre" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {TEMPLATE_GENRES.filter(g => g !== "All").map(g => (
+                                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreateTemplate}>Create</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Template Details</DialogTitle>
+                        <DialogDescription>
+                            Update the name, description, and genre.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Name</label>
+                            <Input
+                                value={newTemplateName}
+                                onChange={(e) => setNewTemplateName(e.target.value)}
+                                placeholder="Template name"
+                                className={nameError ? "border-red-500" : ""}
+                            />
+                            {nameError && <p className="text-sm text-red-500">{nameError}</p>}
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Description</label>
+                            <Input
+                                value={newTemplateDescription}
+                                onChange={(e) => setNewTemplateDescription(e.target.value)}
+                                placeholder="A brief description of this template"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Genre</label>
+                            <Select value={newTemplateGenre} onValueChange={setNewTemplateGenre}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select genre" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {TEMPLATE_GENRES.filter(g => g !== "All").map(g => (
+                                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleRenameTemplate}>Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Select Presentation</DialogTitle>
+                        <DialogDescription>
+                            Choose an existing presentation to append this template into.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search presentations..."
+                                value={importSearchQuery}
+                                onChange={(e) => setImportSearchQuery(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <ScrollArea className="h-[250px]">
+                            {presentations.filter(p => !p.is_template && (p.name || "Untitled").toLowerCase().includes(importSearchQuery.toLowerCase())).length === 0 ? (
+                                <p className="text-center text-sm text-muted-foreground py-10">No presentations found.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {presentations
+                                        .filter(p => !p.is_template && (p.name || "Untitled").toLowerCase().includes(importSearchQuery.toLowerCase()))
+                                        .map(presentation => (
+                                            <div
+                                                key={presentation.id}
+                                                className="flex items-center justify-between p-3 rounded-md border hover:bg-muted cursor-pointer transition-colors"
+                                                onClick={() => executeImportTemplate(presentation.id)}
+                                            >
+                                                <div>
+                                                    <p className="font-medium text-sm">{presentation.name || "Untitled"}</p>
+                                                    <p className="text-xs text-muted-foreground">Updated {new Date(presentation.updated_at).toLocaleDateString()}</p>
+                                                </div>
+                                                <Button size="sm" variant="secondary" disabled={isImporting}>
+                                                    {isImporting ? "Importing..." : "Import Here"}
+                                                </Button>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            )}
+                        </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }

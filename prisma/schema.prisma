@@ -132,7 +132,10 @@ model Show {
   start_time  DateTime?
   finish_time DateTime?
   name        String?    @default("Untitled")
+  description String?    @db.Text
+  genre       String?
   slides_data Json?      @default("[]")
+  is_template Boolean?   @default(false)
   created_at  DateTime?  @default(now())
   updated_at  DateTime?  @default(now())
 

@@ -78,9 +78,19 @@ export default function ContentPage() {
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
   };
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    const oversizedFiles = Array.from(files).filter(f => f.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      const names = oversizedFiles.map(f => `"${f.name}" (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(", ");
+      alert(`File too large!\n\n${names}\n\nMaximum file size is 50 MB. Please compress or resize your file and try again.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     setIsUploading(true);
     try {

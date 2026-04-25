@@ -111,11 +111,11 @@ export default function DisplayPage() {
       let sourceId: string | null = null;
 
       if (manual && manual.slides_data && manual.slides_data.length > 0) {
-        newSlides = manual.slides_data;
+        newSlides = manual.slides_data.map((s: any) => ({ ...s, duration: s.duration || 10 }));
         newName = manual.show_name || "Manual Present";
         sourceId = `manual-${manual.started_at}`;
       } else if (current && current.slides_data && current.slides_data.length > 0) {
-        newSlides = current.slides_data;
+        newSlides = current.slides_data.map((s: any) => ({ ...s, duration: s.duration || 10 }));
         newName = current.name;
         sourceId = `show-${current.id}`;
       }
@@ -126,6 +126,14 @@ export default function DisplayPage() {
         setActiveShowName(newName);
         currentSourceRef.current = sourceId;
         hasAlertedRef.current = false;
+      } else if (sourceId) {
+        setSlides(prev => {
+          if (JSON.stringify(prev) !== JSON.stringify(newSlides)) {
+            setCurrentSlideIndex(curr => Math.min(curr, Math.max(0, newSlides.length - 1)));
+            return newSlides;
+          }
+          return prev;
+        });
       }
 
       if (newSlides.length === 0 && !hasAlertedRef.current) {
@@ -171,7 +179,7 @@ export default function DisplayPage() {
 
     const timer = setInterval(() => {
       setCurrentSlideIndex((prev) => (prev + 1) % slides.length);
-    }, currentSlide.duration * 1000);
+    }, (currentSlide.duration || 10) * 1000);
 
     return () => clearInterval(timer);
   }, [currentSlideIndex, slides.length, currentSlide?.duration, isPlaying]);

@@ -23,6 +23,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Type,
@@ -70,6 +71,13 @@ import {
   FolderOpen,
   ImageIcon as ImageLucide,
   Check,
+  LayoutDashboard,
+  Monitor,
+  Images,
+  Calendar,
+  Tv2,
+  Settings,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -357,6 +365,7 @@ export default function SlideEditorPage() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
+  const [exitTargetUrl, setExitTargetUrl] = useState<string>('/dashboard');
 
   const [isPixabayOpen, setIsPixabayOpen] = useState(false);
   const [pixabaySearch, setPixabaySearch] = useState("");
@@ -366,7 +375,22 @@ export default function SlideEditorPage() {
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState("All");
   const [templateSearch, setTemplateSearch] = useState("");
-  const [templatePreview, setTemplatePreview] = useState<SlideTemplate | null>(null);
+  const [templatePreview, setTemplatePreview] = useState<any | null>(null);
+  const [myTemplates, setMyTemplates] = useState<any[]>([]);
+  const [isLoadingMyTemplates, setIsLoadingMyTemplates] = useState(false);
+  const [draggedSlideIndex, setDraggedSlideIndex] = useState<number | null>(null);
+  const [dragOverSlideIndex, setDragOverSlideIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isTemplatesOpen && myTemplates.length === 0) {
+      setIsLoadingMyTemplates(true);
+      fetch("/api/shows?isTemplate=true")
+        .then(res => res.json())
+        .then(data => setMyTemplates(data.shows || []))
+        .catch(console.error)
+        .finally(() => setIsLoadingMyTemplates(false));
+    }
+  }, [isTemplatesOpen]);
 
   const [imageContextMenu, setImageContextMenu] = useState<{ elementId: string; x: number; y: number } | null>(null);
   const [showCropSubmenu, setShowCropSubmenu] = useState(false);
@@ -831,12 +855,20 @@ export default function SlideEditorPage() {
     return t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.tags.some((tag) => tag.toLowerCase().includes(q));
   });
 
-  const importTemplate = (template: SlideTemplate) => {
-    const clonedSlides = JSON.parse(JSON.stringify(template.slides)).map((slide: any, i: number) => ({
+  const filteredMyTemplates = myTemplates.filter((t) => {
+    if (selectedGenre !== "All" && t.genre !== selectedGenre) return false;
+    if (!templateSearch.trim()) return true;
+    const q = templateSearch.toLowerCase();
+    return t.name?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q) || t.genre?.toLowerCase().includes(q);
+  });
+
+  const importTemplate = (template: any) => {
+    const slidesData = template.slides_data || template.slides;
+    const clonedSlides = JSON.parse(JSON.stringify(slidesData || [])).map((slide: any, i: number) => ({
       ...slide,
       id: Math.random().toString(36).substr(2, 9),
       name: `Slide ${slides.length + i + 1}`,
-      elements: slide.elements.map((el: any) => ({ ...el, id: Math.random().toString(36).substr(2, 9) })),
+      elements: slide.elements?.map((el: any) => ({ ...el, id: Math.random().toString(36).substr(2, 9) })) || [],
     }));
     const newSlides = [...slides, ...clonedSlides];
     setSlides(newSlides);
@@ -844,7 +876,7 @@ export default function SlideEditorPage() {
     saveToHistory(newSlides, slides.length);
     setIsTemplatesOpen(false);
     setTemplatePreview(null);
-    setSlideName((prev) => prev === "Untitled Slide" ? template.name : prev);
+    setSlideName((prev) => prev === "Untitled Slide" ? (template.name || "Template") : prev);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1221,6 +1253,26 @@ export default function SlideEditorPage() {
       setSaveMessage("Saved!");
       setTimeout(() => setSaveMessage(null), 2000);
 
+      // If this show is currently being presented, update active_present with latest slides
+      try {
+        const activeRes = await fetch("/api/shows/active");
+        const activeData = await activeRes.json();
+        const manualPresent = activeData.manualPresent;
+        if (manualPresent && manualPresent.show_id === (data.show?.id || savedShowId)) {
+          await fetch("/api/shows/present", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              showId: data.show?.id || savedShowId,
+              showName: slideName || "Untitled",
+              slidesData: slidesToSave.map(s => ({ ...s, duration: s.duration || 10 })),
+            }),
+          });
+        }
+      } catch (syncErr) {
+        console.error("[Save] Failed to sync active_present:", syncErr);
+      }
+
       const prefs = JSON.parse(localStorage.getItem("slideflow_notifications") || "{}");
       if (prefs.slideUpdates !== false) {
         toast.success("Slide saved successfully", {
@@ -1318,13 +1370,17 @@ export default function SlideEditorPage() {
 
   const presentSlides = async () => {
     try {
+      const sanitizedSlides = slides.map(slide => ({
+        ...slide,
+        duration: slide.duration || 10,
+      }));
       await fetch("/api/shows/present", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           showId: savedShowId || null,
           showName: slideName || "Untitled",
-          slidesData: slides,
+          slidesData: sanitizedSlides,
         }),
       });
     } catch (error) {
@@ -1377,7 +1433,10 @@ export default function SlideEditorPage() {
   return (
     <TooltipProvider>
       <div className={`h-screen flex flex-col ${darkMode ? 'editor-dark' : ''}`}>
-        <Dialog open={showExitWarning} onOpenChange={setShowExitWarning}>
+        <Dialog open={showExitWarning} onOpenChange={(open) => {
+          setShowExitWarning(open);
+          if (!open) setTimeout(() => setExitTargetUrl('/dashboard'), 200);
+        }}>
           <DialogContent className={darkMode ? 'bg-gray-900 border-gray-700 text-white' : ''}>
             <DialogHeader>
               <DialogTitle>Unsaved Changes</DialogTitle>
@@ -1389,12 +1448,12 @@ export default function SlideEditorPage() {
               <Button variant="outline" onClick={() => setShowExitWarning(false)} className={darkMode ? 'border-gray-600 text-white hover:bg-gray-800' : ''}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={() => router.push('/dashboard')}>
+              <Button variant="destructive" onClick={() => router.push(exitTargetUrl)}>
                 Exit Without Saving
               </Button>
               <Button onClick={async () => {
                 await saveSlide();
-                router.push('/dashboard');
+                router.push(exitTargetUrl);
               }}>
                 Save & Exit
               </Button>
@@ -1476,6 +1535,134 @@ export default function SlideEditorPage() {
                   className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
                   onClick={() => {
                     if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard');
+                    }
+                  }}
+                >
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  <span>Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/screens');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/screens');
+                    }
+                  }}
+                >
+                  <Monitor className="mr-2 h-4 w-4" />
+                  <span>Presentations</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/templates');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/templates');
+                    }
+                  }}
+                >
+                  <LayoutTemplate className="mr-2 h-4 w-4" />
+                  <span>Templates</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/content');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/content');
+                    }
+                  }}
+                >
+                  <Images className="mr-2 h-4 w-4" />
+                  <span>Content</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/schedules');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/schedules');
+                    }
+                  }}
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <span>Schedules</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/storing');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/storing');
+                    }
+                  }}
+                >
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  <span>Storing</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/display');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/display');
+                    }
+                  }}
+                >
+                  <Tv2 className="mr-2 h-4 w-4" />
+                  <span>Display</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/settings');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/settings');
+                    }
+                  }}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className={`cursor-pointer ${darkMode ? 'text-white focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard/about');
+                      setShowExitWarning(true);
+                    } else {
+                      router.push('/dashboard/about');
+                    }
+                  }}
+                >
+                  <Info className="mr-2 h-4 w-4" />
+                  <span>About</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className={darkMode ? 'bg-gray-700' : ''} />
+                <DropdownMenuItem 
+                  className={`cursor-pointer text-red-600 focus:text-red-600 ${darkMode ? 'focus:bg-gray-800' : ''}`}
+                  onClick={() => {
+                    if (hasUnsavedChanges) {
+                      setExitTargetUrl('/dashboard');
                       setShowExitWarning(true);
                     } else {
                       router.push('/dashboard');
@@ -1483,7 +1670,7 @@ export default function SlideEditorPage() {
                   }}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Exit to Dashboard</span>
+                  <span>Exit</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1863,14 +2050,49 @@ export default function SlideEditorPage() {
                     {slides.map((slide, index) => (
                       <div
                         key={slide.id}
-                        className={`relative aspect-video border rounded cursor-pointer overflow-hidden ${index === currentSlideIndex
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedSlideIndex(index);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (draggedSlideIndex === null || draggedSlideIndex === index) return;
+                          
+                          if (dragOverSlideIndex !== index) {
+                            setDragOverSlideIndex(index);
+                            
+                            setSlides((prevSlides) => {
+                              const newSlides = [...prevSlides];
+                              const [draggedItem] = newSlides.splice(draggedSlideIndex, 1);
+                              newSlides.splice(index, 0, draggedItem);
+                              return newSlides;
+                            });
+                            
+                            setDraggedSlideIndex(index);
+                            
+                            setCurrentSlideIndex((prevIndex) => {
+                              if (prevIndex === draggedSlideIndex) return index;
+                              if (draggedSlideIndex < prevIndex && index >= prevIndex) return prevIndex - 1;
+                              if (draggedSlideIndex > prevIndex && index <= prevIndex) return prevIndex + 1;
+                              return prevIndex;
+                            });
+                            setHasUnsavedChanges(true);
+                          }
+                        }}
+                        onDragEnd={() => {
+                          setDraggedSlideIndex(null);
+                          setDragOverSlideIndex(null);
+                        }}
+                        className={`relative aspect-video border rounded cursor-pointer overflow-hidden transition-all duration-200 ${index === currentSlideIndex
                           ? darkMode
                             ? 'border-blue-500'
                             : "border-primary ring-2 ring-primary ring-offset-1"
                           : darkMode
                             ? 'border-[#3a4156]'
                             : "border-border"
-                          }`}
+                          } ${draggedSlideIndex === index ? 'opacity-50 scale-95' : ''}`}
                         style={{
                           backgroundColor: slide.backgroundColor,
                           boxShadow: index === currentSlideIndex && darkMode ? '0 0 0 2px #3b82f6' : undefined
@@ -3058,18 +3280,18 @@ export default function SlideEditorPage() {
                         width: '100%',
                         maxWidth: '800px',
                         aspectRatio: '16/9',
-                        backgroundColor: templatePreview.slides[0].backgroundColor,
+                        backgroundColor: templatePreview.slides_data?.[0]?.backgroundColor || templatePreview.slides?.[0]?.backgroundColor || '#ffffff',
                         border: darkMode ? '1px solid #374151' : '1px solid #e5e7eb',
                       }}
                     >
-                      {templatePreview.slides[0].backgroundImage && (
+                      {(templatePreview.slides_data?.[0]?.backgroundImage || templatePreview.slides?.[0]?.backgroundImage) && (
                         <img
-                          src={templatePreview.slides[0].backgroundImage}
+                          src={templatePreview.slides_data?.[0]?.backgroundImage || templatePreview.slides?.[0]?.backgroundImage}
                           alt=""
                           className="absolute inset-0 w-full h-full object-cover z-0"
                         />
                       )}
-                      {templatePreview.slides[0].elements.map((el) => (
+                      {(templatePreview.slides_data?.[0]?.elements || templatePreview.slides?.[0]?.elements || []).map((el: any) => (
                         <div
                           key={el.id}
                           className="absolute"
@@ -3129,15 +3351,109 @@ export default function SlideEditorPage() {
                     <Button variant="outline" onClick={() => setTemplatePreview(null)} className={darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-800' : ''}>Cancel</Button>
                   </div>
                 </div>
-              ) : filteredEditorTemplates.length === 0 ? (
-                <div className="flex items-center justify-center h-64 border-2 border-dashed rounded-lg mt-4 w-full">
-                  <div className="text-center">
-                    <LayoutTemplate className={`h-12 w-12 mx-auto mb-3 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
-                    <p className={darkMode ? 'text-gray-400' : 'text-muted-foreground'}>No templates found. Try a different search or genre.</p>
-                  </div>
-                </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1 mt-2">
+                <div className="pb-4">
+                  {(!isLoadingMyTemplates && myTemplates.length > 0) && (
+                    <div className="mb-6">
+                      <h3 className={`text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>My Templates</h3>
+                      {filteredMyTemplates.length === 0 ? (
+                        <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No custom templates match your search.</p>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+                          {filteredMyTemplates.map((template) => (
+                            <div
+                              key={template.id}
+                              className={`cursor-pointer rounded-lg border p-2 transition-all hover:shadow-md ${darkMode ? 'border-gray-700 hover:border-blue-500 bg-gray-800' : 'border-gray-200 hover:border-blue-400 bg-white'}`}
+                              onClick={() => setTemplatePreview(template)}
+                            >
+                              <div
+                                className="@container flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-md overflow-hidden mb-2"
+                                style={{
+                                  width: '100%',
+                                  aspectRatio: '16/9',
+                                  backgroundColor: template.slides_data?.[0]?.backgroundColor || '#ffffff',
+                                  position: 'relative',
+                                }}
+                              >
+                                {template.slides_data?.[0]?.backgroundImage && (
+                                  <img
+                                    src={template.slides_data[0].backgroundImage}
+                                    alt=""
+                                    className="absolute inset-0 w-full h-full object-cover z-0"
+                                  />
+                                )}
+                                {(template.slides_data?.[0]?.elements || []).map((el: any) => (
+                                  <div
+                                    key={el.id}
+                                    className="absolute"
+                                    style={{
+                                      left: `${(el.x / 960) * 100}%`,
+                                      top: `${(el.y / 540) * 100}%`,
+                                      width: `${(el.width / 960) * 100}%`,
+                                      height: `${(el.height / 540) * 100}%`,
+                                      fontSize: el.style.fontSize ? `${(el.style.fontSize / 960) * 100}cqw` : undefined,
+                                      color: el.style.color,
+                                      fontFamily: `${el.style.fontFamily || 'Arial'}, var(--font-emoji), sans-serif`,
+                                      fontWeight: el.style.fontWeight,
+                                      fontStyle: el.style.fontStyle,
+                                      textDecoration: el.style.textDecoration,
+                                      backgroundColor: el.type === "shape" ? el.style.backgroundColor : undefined,
+                                      borderRadius: el.style.borderRadius,
+                                      clipPath: el.style.clipPath,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                                      overflow: 'hidden',
+                                    }}
+                                  >
+                                    {el.type === 'text' && (
+                                      <div
+                                        className="w-full h-full flex items-start px-1 overflow-hidden"
+                                        style={{
+                                          justifyContent: el.style.textAlign === 'center' ? 'center' : el.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                                          textAlign: el.style.textAlign as any,
+                                          wordWrap: 'break-word',
+                                          overflowWrap: 'break-word',
+                                          whiteSpace: 'pre-wrap',
+                                          lineHeight: '1.4',
+                                        }}
+                                      >
+                                        {el.content}
+                                      </div>
+                                    )}
+                                    {el.type === 'image' && el.src && (
+                                      <div className="w-full h-full overflow-hidden" style={getCropStyle(el.cropShape)}>
+                                        <img src={el.src} alt="" className="w-full h-full object-cover" />
+                                      </div>
+                                    )}
+                                    {el.type === 'video' && (
+                                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                                        <Video className="w-4 h-4 text-white" />
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="px-1">
+                                <h4 className={`text-sm font-medium truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{template.name}</h4>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <h3 className={`text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Premade Templates</h3>
+                  {filteredEditorTemplates.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 border-2 border-dashed rounded-lg w-full">
+                      <div className="text-center">
+                        <LayoutTemplate className={`h-8 w-8 mx-auto mb-2 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+                        <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-muted-foreground'}`}>No premade templates found.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1 mt-2">
                   {filteredEditorTemplates.map((template) => (
                     <div
                       key={template.id}
@@ -3219,6 +3535,8 @@ export default function SlideEditorPage() {
                   ))}
                 </div>
               )}
+              </div>
+            )}
             </ScrollArea>
           </DialogContent>
         </Dialog>

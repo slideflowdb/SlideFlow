@@ -43,6 +43,13 @@ export async function GET(request: NextRequest) {
             query = query.not("start_time", "is", null);
         }
 
+        const isTemplate = searchParams.get("isTemplate") === "true";
+        if (isTemplate) {
+            query = query.eq("is_template", true);
+        } else {
+            query = query.or("is_template.eq.false,is_template.is.null");
+        }
+
         if (folderId === "root") {
             query = query.is("folder_id", null);
         } else if (folderId) {
@@ -66,7 +73,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, contentId, name, scheduleName, slidesData, startTime, finishTime, deviceId, locationId, clientId, folderId } = body;
+        const { id, contentId, name, description, genre, scheduleName, slidesData, startTime, finishTime, deviceId, locationId, clientId, folderId, isTemplate } = body;
 
         let validContentId = null;
         let generatedSlidesData = slidesData;
@@ -131,6 +138,9 @@ export async function POST(request: NextRequest) {
             if (clientId !== undefined) updateData.client_id = clientId;
             if (validContentId !== null) updateData.content_id = validContentId;
             if (folderId !== undefined) updateData.folder_id = folderId;
+            if (isTemplate !== undefined) updateData.is_template = isTemplate;
+            if (description !== undefined) updateData.description = description;
+            if (genre !== undefined) updateData.genre = genre;
 
             const { data, error } = await supabase
                 .from("show")
@@ -148,8 +158,11 @@ export async function POST(request: NextRequest) {
         } else {
             const insertData: any = {
                 name: name || "Untitled",
+                description: description || undefined,
+                genre: genre || undefined,
                 schedule_name: scheduleName || undefined,
                 slides_data: generatedSlidesData || [],
+                is_template: isTemplate || false,
             };
 
             if (validContentId !== null) insertData.content_id = validContentId;

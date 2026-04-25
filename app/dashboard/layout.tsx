@@ -1,11 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { UserNav } from "@/components/user-nav";
 import { DarkModeToggle } from "@/components/dark-mode-toggle";
+
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/dashboard/screens": "Presentations",
+  "/dashboard/templates": "Templates",
+  "/dashboard/content": "Content",
+  "/dashboard/schedules": "Schedules",
+  "/dashboard/storing": "Storing",
+  "/dashboard/display": "Display",
+  "/dashboard/settings": "Settings",
+  "/dashboard/about": "About",
+  "/dashboard/credentials": "Credentials",
+};
+
+function DynamicTitle() {
+  const pathname = usePathname();
+  const title = PAGE_TITLES[pathname] || "Dashboard";
+  return <h2 className="text-lg font-semibold">{title}</h2>;
+}
 
 export default function DashboardLayout({
   children,
@@ -60,7 +79,7 @@ export default function DashboardLayout({
       <div className="flex-1 flex flex-col">
         
         <header className="h-16 border-b bg-card flex items-center justify-between px-6">
-          <h2 className="text-lg font-semibold">Dashboard</h2>
+          <DynamicTitle />
           <div className="flex items-center gap-2">
             <DarkModeToggle />
             <UserNav />
