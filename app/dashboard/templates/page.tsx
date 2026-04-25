@@ -313,6 +313,42 @@ export default function TemplatesPage() {
         }
     };
 
+    const handleImportToNewPresentation = async () => {
+        if (!templateToImport) return;
+        setIsImporting(true);
+        try {
+            const clonedSlides = JSON.parse(JSON.stringify(templateToImport.slides_data || [])).map((slide: any, i: number) => ({
+                ...slide,
+                id: Math.random().toString(36).substr(2, 9),
+                duration: slide.duration || 10,
+                elements: slide.elements?.map((el: any) => ({
+                    ...el,
+                    id: Math.random().toString(36).substr(2, 9),
+                })) || [],
+            }));
+
+            const response = await fetch("/api/shows", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: `${templateToImport.name} (Copy)`,
+                    slidesData: clonedSlides,
+                }),
+            });
+
+            if (!response.ok) throw new Error("Failed to create show from template");
+
+            const data = await response.json();
+            if (data.show?.id) {
+                router.push(`/editor/${data.show.id}`);
+            }
+        } catch (error) {
+            console.error("Error creating new presentation from template:", error);
+            setIsImporting(false);
+            alert("Failed to create new presentation from template.");
+        }
+    };
+
     const filteredMyTemplates = useMemo(() => {
         return myTemplates.filter((t) => {
             if (selectedGenre !== "All" && t.genre !== selectedGenre) return false;
@@ -742,11 +778,31 @@ export default function TemplatesPage() {
                             />
                         </div>
                         <ScrollArea className="h-[250px]">
-                            {presentations.filter(p => !p.is_template && (p.name || "Untitled").toLowerCase().includes(importSearchQuery.toLowerCase())).length === 0 ? (
-                                <p className="text-center text-sm text-muted-foreground py-10">No presentations found.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {presentations
+                            <div className="space-y-2">
+                                {!importSearchQuery && (
+                                    <div
+                                        className="flex items-center justify-between p-3 rounded-md border border-primary bg-primary/5 hover:bg-primary/10 cursor-pointer transition-colors mb-4"
+                                        onClick={handleImportToNewPresentation}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-primary/20 p-2 rounded-full">
+                                                <Plus className="h-4 w-4 text-primary" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-sm text-primary">Create New Presentation</p>
+                                                <p className="text-xs text-muted-foreground">Start a fresh presentation with this template</p>
+                                            </div>
+                                        </div>
+                                        <Button size="sm" disabled={isImporting}>
+                                            {isImporting ? "Creating..." : "Create New"}
+                                        </Button>
+                                    </div>
+                                )}
+                                
+                                {presentations.filter(p => !p.is_template && (p.name || "Untitled").toLowerCase().includes(importSearchQuery.toLowerCase())).length === 0 ? (
+                                    <p className="text-center text-sm text-muted-foreground py-6">No existing presentations found.</p>
+                                ) : (
+                                    presentations
                                         .filter(p => !p.is_template && (p.name || "Untitled").toLowerCase().includes(importSearchQuery.toLowerCase()))
                                         .map(presentation => (
                                             <div
@@ -763,9 +819,8 @@ export default function TemplatesPage() {
                                                 </Button>
                                             </div>
                                         ))
-                                    }
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </ScrollArea>
                     </div>
                 </DialogContent>
