@@ -135,6 +135,8 @@ export default function TemplatesPage() {
     const [presentations, setPresentations] = useState<any[]>([]);
     const [importSearchQuery, setImportSearchQuery] = useState("");
     const [templateToImport, setTemplateToImport] = useState<any>(null);
+    const [isCreateFromTemplateModalOpen, setIsCreateFromTemplateModalOpen] = useState(false);
+    const [newPresentationName, setNewPresentationName] = useState("");
 
     useEffect(() => {
         const fetchTemplates = async () => {
@@ -313,8 +315,15 @@ export default function TemplatesPage() {
         }
     };
 
-    const handleImportToNewPresentation = async () => {
+    const handleImportToNewPresentation = () => {
         if (!templateToImport) return;
+        setNewPresentationName(`${templateToImport.name} (Copy)`);
+        setIsImportModalOpen(false);
+        setIsCreateFromTemplateModalOpen(true);
+    };
+
+    const executeCreateNewPresentation = async () => {
+        if (!templateToImport || !newPresentationName.trim()) return;
         setIsImporting(true);
         try {
             const clonedSlides = JSON.parse(JSON.stringify(templateToImport.slides_data || [])).map((slide: any, i: number) => ({
@@ -331,7 +340,7 @@ export default function TemplatesPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    name: `${templateToImport.name} (Copy)`,
+                    name: newPresentationName.trim(),
                     slidesData: clonedSlides,
                 }),
             });
@@ -823,6 +832,37 @@ export default function TemplatesPage() {
                             </div>
                         </ScrollArea>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isCreateFromTemplateModalOpen} onOpenChange={setIsCreateFromTemplateModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Create New Presentation</DialogTitle>
+                        <DialogDescription>
+                            Enter a name for your new presentation based on this template.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Presentation Name</label>
+                            <Input
+                                value={newPresentationName}
+                                onChange={(e) => setNewPresentationName(e.target.value)}
+                                placeholder="e.g., Q3 Marketing Report"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsCreateFromTemplateModalOpen(false)}>Cancel</Button>
+                        <Button 
+                            onClick={executeCreateNewPresentation} 
+                            disabled={!newPresentationName.trim() || isImporting}
+                        >
+                            {isImporting ? "Creating..." : "Create Presentation"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
